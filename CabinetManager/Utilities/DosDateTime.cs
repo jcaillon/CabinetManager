@@ -1,9 +1,7 @@
 ﻿using System;
 
-namespace CabinetManager.core {
-
+namespace CabinetManager.Utilities {
     public static class DosDateTime {
-
         public static DateTime DosDateTimeToDateTime(ushort wFatDate, ushort wFatTime) {
             // for the date part :
             // 16  =  7 +           4 +     5
@@ -20,5 +18,12 @@ namespace CabinetManager.core {
             wFatTime = (ushort) ((time.Hour << 11) + (time.Minute << 5) + time.Second / 2);
         }
 
+        public static DateTime DosDateTimeToDateTimeUtc(ushort wFatDate, ushort wFatTime) {
+            return DosDateTimeToDateTime(wFatDate, wFatTime).ToLocalTime();
+        }
+
+        public static void DateTimeToDosDateTimeUtc(DateTime time, out ushort wFatDate, out ushort wFatTime) {
+            DateTimeToDosDateTime(time.ToUniversalTime(), out wFatDate, out wFatTime);
+        }
     }
 }

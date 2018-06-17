@@ -1,15 +1,72 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using CabinetManager.core;
 
-namespace CabinetManager.core {
+namespace CabinetManager {
+    public class Cab : ICab {
+        public void PackFileSet(List<IFileToCab> files, CabCompressionLevel cabCompressionLevel, EventHandler<CabProgressionEventArgs> progressHandler = null) {
+            foreach (var fileToCab in files) {
+                if (string.IsNullOrEmpty(fileToCab.RelativePathInCab) || string.IsNullOrEmpty(fileToCab.SourcePath)) {
+                    throw new ArgumentNullException("Arguments can't be empty or null");
+                }
 
-    public class Cabinet : ICabinet {
+                if (_cabPathToSourcePathMap.ContainsKey(fileToCab.RelativePathInCab)) {
+                    throw new ArgumentException($"The path already exists in this cab : {fileToCab.RelativePathInCab}");
+                }
+            }
+        }
 
-        internal const uint CabinetMaximumSize = uint.MaxValue;
-        internal const int FileMaximumSize = 0x7FFF8000;
-        internal const int CabPathMaximumLength = 256;
+        public List<IFileInCab> ListFiles(string archivePath) {
+            var cfCabinet = new CfCabinet(archivePath);
+            return cfCabinet.Folders
+                .SelectMany(folder => folder.Files)
+                .Select(file => new FileInCab {
+                    CabPath = archivePath,
+                    RelativePathInCab = file.RelativePathInCab,
+                    LastWriteTime = file.FileDateTime,
+                    SizeInBytes = file.UncompressedFileSize
+                } as IFileInCab)
+                .ToList();
+        }
 
-        public List<FileToAdd> FilesToAdd;
+        public void ExtractFileSet(List<IFileToExtractFromCab> files, EventHandler<CabProgressionEventArgs> progressHandler = null) {
+            foreach (var cabGroupedFiles in files.GroupBy(f => f.CabPath)) {
+                if (string.IsNullOrEmpty(cabGroupedFiles.Key)) {
+                    throw new CabException("Invalid cab path, can't be null");
+                }
+
+                var cfCabinet = new CfCabinet(cabGroupedFiles.Key);
+                if (!cfCabinet.Exists) {
+                    throw new CabException($"The .cab doesn't exist : {cabGroupedFiles.Key}");
+                }
+
+                var filesInCab = cfCabinet.Folders.SelectMany(folder => folder.Files).ToList();
+
+                using (Stream stream = File.OpenRead(cabGroupedFiles.Key)) {
+                    foreach (var fileToExtractFromCab in cabGroupedFiles) {
+                        var fileInCab = filesInCab.FirstOrDefault(f => f.RelativePathInCab.Equals(fileToExtractFromCab.RelativePathInCab, StringComparison.CurrentCultureIgnoreCase));
+                        if (fileInCab == null) {
+                            throw new CabException($"The file {fileToExtractFromCab.RelativePathInCab ?? "null"} doesn't exist in {cabGroupedFiles.Key}");
+                        }
+
+                        fileInCab.ExtractToFile(stream, fileToExtractFromCab.ToPath);
+                    }
+                }
+            }
+        }
+
+        public string GetCabDetails(string archivePath) {
+            var cfCabinet = new CfCabinet(archivePath);
+            using (Stream stream = File.OpenRead(archivePath)) {
+                foreach (var cfFolder in cfCabinet.Folders) {
+                    cfFolder.ReadDataHeaderFromStream(stream);
+                }
+            }
+
+            return cfCabinet.ToString();
+        }
 
         /// <summary>
         /// Map a relative path in the cab file to the absolute file path
@@ -24,23 +81,10 @@ namespace CabinetManager.core {
         private List<CfData> _data;
 
         public void AddFile(string relativePathInCab, string absoluteFilePath) {
-            if (string.IsNullOrEmpty(relativePathInCab) || string.IsNullOrEmpty(absoluteFilePath)) {
-                throw new ArgumentNullException("Arguments can't be empty or null");
-            }
-            if (_cabPathToSourcePathMap.ContainsKey(relativePathInCab)) {
-                throw new ArgumentException($"The path already exists in this cab : {relativePathInCab}");
-            }
-            if (relativePathInCab.Length > CabPathMaximumLength) {
-                throw new ArgumentException($"The provided path is too long for .cab file, maximum length is {CabPathMaximumLength}, provided path is {relativePathInCab.Length}");
-            }
-
             _cabPathToSourcePathMap.Add(relativePathInCab, absoluteFilePath);
         }
 
         public void Save(string cabFilePath) {
-
-
-
             /*
             Stream dest = ...
             using(Stream source = File.OpenRead(path)) {

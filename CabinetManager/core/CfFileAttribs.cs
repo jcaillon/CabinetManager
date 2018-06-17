@@ -1,7 +1,6 @@
 ﻿using System;
 
 namespace CabinetManager.core {
-
     [Flags]
     enum CfFileAttribs : ushort {
         None = 0,

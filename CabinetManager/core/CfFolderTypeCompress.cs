@@ -1,5 +1,5 @@
 ﻿namespace CabinetManager.core {
-    enum CfFolderTypeCompress : ushort {           
+    enum CfFolderTypeCompress : ushort {
         None = 0x0000,
 
         /// <summary>
