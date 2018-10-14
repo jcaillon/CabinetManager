@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using CabinetManager.Utilities;
+using Oetools.Utilities.Archive;
 
 namespace CabinetManager.core {
     
@@ -23,10 +24,16 @@ namespace CabinetManager.core {
     /// </para>
     /// </summary>
     internal class CfCabinet {
-        public CfCabinet(string cabPath) {
+        public CfCabinet(string cabPath, BinaryReader reader = null) {
             CabPath = cabPath;
             if (Exists) {
-                ReadHeaders();
+                if (reader != null) {
+                    ReadCabinetInfo(reader);
+                } else {
+                    using (BinaryReader reader2 = new BinaryReader(File.OpenRead(cabPath))) {
+                        ReadCabinetInfo(reader2);
+                    }
+                }
             }
         }
 
@@ -220,12 +227,109 @@ namespace CabinetManager.core {
         internal CfCabinet NextCabinet { get; private set; }
 
         /// <summary>
+        /// Read data from <see cref="CabPath"/> to fill this <see cref="CfCabinet"/>
+        /// </summary>
+        /// <param name="reader"></param>
+        private void ReadCabinetInfo(BinaryReader reader) {
+            ReadCabinetHeader(reader);
+            ReadFileAndFolderHeaders(reader);
+
+            // load next cabinet (if any) headers
+            while (!string.IsNullOrEmpty(NextCabinetFileName)) {
+                var cabDirectory = Path.GetDirectoryName(CabPath);
+                if (string.IsNullOrEmpty(cabDirectory)) {
+                    throw new CfCabException($"Invalid directory name for {CabPath}");
+                }
+
+                var nextCabinetFilePath = Path.Combine(cabDirectory, NextCabinetFileName);
+                if (!File.Exists(nextCabinetFilePath)) {
+                    throw new CfCabException($"Could not find the next cabinet file {NextCabinetFileName} in {cabDirectory}");
+                }
+
+                using (BinaryReader nextCabReader = new BinaryReader(File.OpenRead(nextCabinetFilePath))) {
+                    NextCabinet = new CfCabinet(nextCabinetFilePath, nextCabReader);
+                    
+                    // crash now because we won't be able to correctly read data later anyway...
+                    throw new NotImplementedException("The management of several consecutive cabinet files is not implemented yet");
+                }
+            }
+        }
+
+        public void AddExternalFile(string sourcePath, string relativePathInCab) {
+            foreach (var folder in Folders) {
+                if (folder.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase)) > 0) {
+                    break;
+                }
+            }
+
+            var fileInfo = new FileInfo(sourcePath);
+            var fileInfoLength = fileInfo.Length;
+            if (fileInfo.Length > CfFile.FileMaximumSize) {
+                throw new CfCabException($"The file exceeds the maximum size of {CfFile.FileMaximumSize} with a length of {fileInfoLength} bytes.");
+            }
+
+            var idx = 0;
+            while (true) {
+                if (idx >= Folders.Count) {
+                    Folders.Add(new CfFolder(this));
+                }
+
+                if (Folders[idx].FolderUncompressedSize + fileInfoLength <= CfFolder.FolderMaximumUncompressedSize) {
+                    break;
+                }
+
+                idx++;
+            }
+
+            var addedFile = new CfFile(Folders[idx]) {
+                RelativePathInCab = relativePathInCab,
+                AbsolutePath = sourcePath,
+                UncompressedFileSize = (uint) fileInfoLength,
+                // TODO : set files attributes
+                FileDateTime = fileInfo.LastWriteTime
+            };
+
+            Folders[idx].Files.Add(addedFile);
+        }
+
+        /// <summary>
+        /// Extracts a file to an external path.
+        /// </summary>
+        /// <param name="reader"></param>
+        /// <param name="relativePathInCab"></param>
+        /// <param name="extractionPath"></param>
+        public void ExtractToFile(BinaryReader reader, string relativePathInCab, string extractionPath) {
+            var fileInCab = Folders.SelectMany(folder => folder.Files).FirstOrDefault(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
+            fileInCab?.ExtractToFile(reader, extractionPath);
+        }
+        
+        /// <summary>
         /// Write this instance of <see cref="CfCabinet"/> to a stream
         /// </summary>
-        /// <param name="stream"></param>
-        private void WriteToStream(Stream stream) {
-            WriteHeaderToStream(stream);
-            ReadHeaderFromStream(stream);
+        /// <param name="writer"></param>
+        private void Write(BinaryWriter writer) {
+            writer.BaseStream.Position = 0;
+            
+            WriteHeaderToStream(writer);
+            WriteFileAndFolderHeaders(writer);
+
+            WriteData(writer);
+        }
+
+        private void WriteFileAndFolderHeaders(BinaryWriter writer) {
+            foreach (var folder in Folders.OrderBy(f => f.FolderIndex)) {
+                folder.WriteFolderHeader(writer);
+            }
+
+            foreach (var folder in Folders.OrderBy(f => f.FolderIndex)) {
+                // files are supposed to be sorted by folder index then by uncompressed size
+                foreach (var file in folder.Files.OrderBy(f => f.UncompressedFileSize)) {
+                    file.WriteFileHeader(writer);
+                }
+            }
+        }
+
+        private void WriteData(BinaryWriter writer) {
             // write data
             //// write compressed data
             //// TODO : compression algo
@@ -243,73 +347,30 @@ namespace CabinetManager.core {
             //    folder.FirstDataBlockOffset = GetFirstFileEntryOffset() + (uint) Folders.SelectMany(f => f.Files).Sum(f => f.FileHeaderLength) + 0;
             //    folder.UpdateDataBlockInfo(stream);
             //}
+            
         }
-
-        /// <summary>
-        /// Read data from <see cref="CabPath"/> to fill this <see cref="CfCabinet"/>
-        /// </summary>
-        private void ReadHeaders() {
-            using (Stream stream = File.OpenRead(CabPath)) {
-                ReadHeaderFromStream(stream);
-                ReadFileAndFolderHeadersFromStream(stream);
-
-                // load next cabinet (if any) headers
-                while (!string.IsNullOrEmpty(NextCabinetFileName)) {
-                    var cabDirectory = Path.GetDirectoryName(CabPath);
-                    if (string.IsNullOrEmpty(cabDirectory)) {
-                        throw new CfCabException($"Invalid directory name for {CabPath}");
-                    }
-
-                    var nextCabinetFilePath = Path.Combine(cabDirectory, NextCabinetFileName);
-                    if (!File.Exists(nextCabinetFilePath)) {
-                        throw new CfCabException($"Could not find the next cabinet file {NextCabinetFileName} in {cabDirectory}");
-                    }
-
-                    NextCabinet = new CfCabinet(nextCabinetFilePath);
-                }
-            }
-        }
-
-        private void ReadFileAndFolderHeadersFromStream(Stream stream) {
-            for (int i = 0; i < FoldersCount; i++) {
-                var cfFolder = new CfFolder(this);
-                cfFolder.ReadHeaderFromStream(stream);
-                Folders.Add(cfFolder);
-            }
-
-            for (int i = 0; i < FilesCount; i++) {
-                var cfFile = new CfFile(null);
-                cfFile.ReadHeaderFromStream(stream);
-                if (cfFile.FolderIndex >= Folders.Count) {
-                    throw new CfCabException($"Invalid folder index ({cfFile.FolderIndex}) for file {cfFile.RelativePathInCab}");
-                }
-
-                cfFile.Parent = Folders[cfFile.FolderIndex];
-                Folders[cfFile.FolderIndex].Files.Add(cfFile);
-            }
-        }
-
-        private void WriteHeaderToStream(Stream stream) {
-            stream.Write(_signature, 0, _signature.Length);
-            stream.WriteAsByteArray(_reserved1);
-            stream.WriteAsByteArray(CabinetSize);
-            stream.WriteAsByteArray(_reserved2);
+        
+        private void WriteHeaderToStream(BinaryWriter writer) {
+            writer.Write(_signature, 0, _signature.Length);
+            writer.Write(_reserved1);
+            writer.Write(CabinetSize);
+            writer.Write(_reserved2);
             FirstFileEntryOffset = GetFirstFileEntryOffset();
-            stream.WriteAsByteArray(FirstFileEntryOffset);
-            stream.WriteAsByteArray(_reserved3);
-            stream.WriteByte(_versionMinor);
-            stream.WriteByte(_versionMajor);
+            writer.Write(FirstFileEntryOffset);
+            writer.Write(_reserved3);
+            writer.Write(_versionMinor);
+            writer.Write(_versionMajor);
             FoldersCount = GetFoldersCount();
-            stream.WriteAsByteArray(FoldersCount);
+            writer.Write(FoldersCount);
             FilesCount = GetFilesCount();
-            stream.WriteAsByteArray(FilesCount);
-            stream.WriteAsByteArray((ushort) Flags);
+            writer.Write(FilesCount);
+            writer.Write((ushort) Flags);
             if (SetId == 0) {
                 SetId = (ushort) new Random().Next(ushort.MaxValue);
             }
 
-            stream.WriteAsByteArray(SetId);
-            stream.WriteAsByteArray(CabinetNumber);
+            writer.Write(SetId);
+            writer.Write(CabinetNumber);
 
             // optional from there
 
@@ -318,125 +379,127 @@ namespace CabinetManager.core {
                     throw new CfCabException($"Maximum cabinet reserved data length is {MaxCabinetReservedAreaDataLength}, you try to use {CabinetReservedArea.Length}");
                 }
 
-                stream.WriteAsByteArray((ushort) CabinetReservedArea.Length);
-                stream.WriteByte(FolderReservedAreaSize);
-                stream.WriteByte(DataReservedAreaSize);
+                writer.Write((ushort) CabinetReservedArea.Length);
+                writer.Write(FolderReservedAreaSize);
+                writer.Write(DataReservedAreaSize);
 
                 if (CabinetReservedArea.Length > 0) {
-                    stream.Write(CabinetReservedArea, 0, CabinetReservedArea.Length);
+                    writer.Write(CabinetReservedArea, 0, CabinetReservedArea.Length);
                 }
             }
 
             if (Flags.HasFlag(CfHeaderFlag.CfhdrPrevCabinet)) {
-                var lght = stream.WriteAsByteArray(PreviousCabinetFileName);
+                var lght = writer.WriteNullTerminatedString(PreviousCabinetFileName);
                 if (lght >= CabFileNameMaximumLength) {
-                    throw new CfCabException($"PreviousCabinetFileName ({PreviousCabinetFileName}) exceeds the maximum autorised length of {CabFileNameMaximumLength} with {lght}");
+                    throw new CfCabException($"PreviousCabinetFileName ({PreviousCabinetFileName}) exceeds the maximum authorised length of {CabFileNameMaximumLength} with {lght}.");
                 }
 
-                lght = stream.WriteAsByteArray(PreviousCabinetPromptName);
+                lght = writer.WriteNullTerminatedString(PreviousCabinetPromptName);
                 if (lght >= CabFileNameMaximumLength) {
-                    throw new CfCabException($"PreviousCabinetPromptName ({PreviousCabinetPromptName}) exceeds the maximum autorised length of {CabFileNameMaximumLength} with {lght}");
+                    throw new CfCabException($"PreviousCabinetPromptName ({PreviousCabinetPromptName}) exceeds the maximum authorised length of {CabFileNameMaximumLength} with {lght}.");
                 }
             }
 
             if (Flags.HasFlag(CfHeaderFlag.CfhdrNextCabinet)) {
-                var lght = stream.WriteAsByteArray(NextCabinetFileName);
+                var lght = writer.WriteNullTerminatedString(NextCabinetFileName);
                 if (lght >= CabFileNameMaximumLength) {
-                    throw new CfCabException($"NextCabinetFileName ({NextCabinetFileName}) exceeds the maximum autorised length of {CabFileNameMaximumLength} with {lght}");
+                    throw new CfCabException($"NextCabinetFileName ({NextCabinetFileName}) exceeds the maximum authorised length of {CabFileNameMaximumLength} with {lght}.");
                 }
 
-                lght = stream.WriteAsByteArray(NextCabinetPromptName);
+                lght = writer.WriteNullTerminatedString(NextCabinetPromptName);
                 if (lght >= CabFileNameMaximumLength) {
-                    throw new CfCabException($"NextCabinetPromptName ({NextCabinetPromptName}) exceeds the maximum autorised length of {CabFileNameMaximumLength} with {lght}");
+                    throw new CfCabException($"NextCabinetPromptName ({NextCabinetPromptName}) exceeds the maximum authorised length of {CabFileNameMaximumLength} with {lght}.");
                 }
             }
         }
 
-        private void ReadHeaderFromStream(Stream stream) {
-            int nbBytesRead = 0;
+        private void ReadCabinetHeader(BinaryReader reader) {
             // u1[4] signature
-            nbBytesRead += stream.Read(_signature, 0, _signature.Length);
+            reader.Read(_signature, 0, _signature.Length);
             // u4 reserved1
-            nbBytesRead += stream.ReadAsByteArray(out _reserved1);
+            _reserved1 = reader.ReadUInt32();
             // u4 cbCabinet
-            nbBytesRead += stream.ReadAsByteArray(out uint cabinetSize);
-            CabinetSize = cabinetSize;
+            CabinetSize = reader.ReadUInt32();
             // u4 reserved2
-            nbBytesRead += stream.ReadAsByteArray(out _reserved2);
+            _reserved2 = reader.ReadUInt32();
             // u4 coffFiles
-            nbBytesRead += stream.ReadAsByteArray(out uint firstFileEntryOffset);
-            FirstFileEntryOffset = firstFileEntryOffset;
+            FirstFileEntryOffset = reader.ReadUInt32();
             // u4 reserved3
-            nbBytesRead += stream.ReadAsByteArray(out _reserved3);
+            _reserved3 = reader.ReadUInt32();
             // u1 versionMinor
-            nbBytesRead += 1;
-            _versionMinor = (byte) stream.ReadByte();
+            _versionMinor = reader.ReadByte();
             // u1 versionMajor
-            nbBytesRead += 1;
-            _versionMajor = (byte) stream.ReadByte();
+            _versionMajor = reader.ReadByte();
             if (_versionMinor != CabVersionMinor || _versionMajor != CabVersionMajor) {
                 throw new CfCabException($"Cab version expected {CabVersionMajor}.{CabVersionMinor}, actual {_versionMajor}.{_versionMinor}");
             }
 
             // u2 cFolders
-            nbBytesRead += stream.ReadAsByteArray(out ushort foldersCount);
-            FoldersCount = foldersCount;
+            FoldersCount = reader.ReadUInt16();
             // u2 cFiles
-            nbBytesRead += stream.ReadAsByteArray(out ushort filesCount);
-            FilesCount = filesCount;
+            FilesCount = reader.ReadUInt16();
             // u2 flags
-            nbBytesRead += stream.ReadAsByteArray(out ushort flags);
-            Flags = (CfHeaderFlag) flags;
+            Flags = (CfHeaderFlag) reader.ReadUInt16();
             // u2 setID
-            nbBytesRead += stream.ReadAsByteArray(out ushort setId);
-            SetId = setId;
+            SetId = reader.ReadUInt16();
             // u2 iCabinet
-            nbBytesRead += stream.ReadAsByteArray(out ushort cabinetNumber);
-            CabinetNumber = cabinetNumber;
+            CabinetNumber = reader.ReadUInt16();
 
             // optional from there
 
             if (Flags.HasFlag(CfHeaderFlag.CfhdrReservePresent)) {
                 // u2 cbCFHeader(optional)
-                nbBytesRead += stream.ReadAsByteArray(out ushort cabinetReservedAreaLength);
+                var cabinetReservedAreaLength = reader.ReadUInt16();
                 CabinetReservedArea = new byte[cabinetReservedAreaLength];
                 if (CabinetReservedArea.Length > MaxCabinetReservedAreaDataLength) {
                     throw new CfCabException($"Maximum cabinet reserved data length is {MaxCabinetReservedAreaDataLength}, used {CabinetReservedArea.Length}");
                 }
 
                 // u1 cbCFFolder(optional)
-                nbBytesRead += 1;
-                FolderReservedAreaSize = (byte) stream.ReadByte();
+                FolderReservedAreaSize = reader.ReadByte();
                 // u1 cbCFData(optional)
-                nbBytesRead += 1;
-                DataReservedAreaSize = (byte) stream.ReadByte();
+                DataReservedAreaSize = reader.ReadByte();
 
                 // u1[cbCFHeader] abReserve(optional)
                 if (CabinetReservedArea.Length > 0) {
-                    nbBytesRead += stream.Read(CabinetReservedArea, 0, CabinetReservedArea.Length);
                 }
             }
 
             if (Flags.HasFlag(CfHeaderFlag.CfhdrPrevCabinet)) {
                 // u1[]NULL szCabinetPrev(optional)
-                nbBytesRead += stream.ReadAsByteArray(out string previousCabinetFileName);
-                PreviousCabinetFileName = previousCabinetFileName;
+                PreviousCabinetFileName =  reader.ReadNullTerminatedString();
                 // u1[]NULL szDiskPrev(optional)
-                nbBytesRead += stream.ReadAsByteArray(out string previousCabinetPromptName);
-                PreviousCabinetPromptName = previousCabinetPromptName;
+                PreviousCabinetPromptName = reader.ReadNullTerminatedString();
             }
 
             if (Flags.HasFlag(CfHeaderFlag.CfhdrNextCabinet)) {
                 // u1[]NULL szCabinetNext(optional)
-                nbBytesRead += stream.ReadAsByteArray(out string nextCabinetFileName);
-                NextCabinetFileName = nextCabinetFileName;
+                NextCabinetFileName = reader.ReadNullTerminatedString();
                 // u1[]NULL szDiskNext(optional)
-                nbBytesRead += stream.ReadAsByteArray(out string nextCabinetPromptName);
-                NextCabinetPromptName = nextCabinetPromptName;
+                NextCabinetPromptName = reader.ReadNullTerminatedString();
             }
 
-            if (nbBytesRead != HeaderLength) {
-                throw new CfCabException($"Header length expected {HeaderLength} vs actual {nbBytesRead}");
+            if (reader.BaseStream.Position != HeaderLength) {
+                throw new CfCabException($"Header length expected {HeaderLength} vs actual {reader.BaseStream.Position}");
+            }
+        }
+
+        private void ReadFileAndFolderHeaders(BinaryReader reader) {
+            for (int i = 0; i < FoldersCount; i++) {
+                var cfFolder = new CfFolder(this);
+                cfFolder.ReadFolderHeader(reader);
+                Folders.Add(cfFolder);
+            }
+
+            for (int i = 0; i < FilesCount; i++) {
+                var cfFile = new CfFile(null);
+                cfFile.ReadFileHeader(reader);
+                if (cfFile.FolderIndex >= Folders.Count) {
+                    throw new CfCabException($"Invalid folder index ({cfFile.FolderIndex}) for file {cfFile.RelativePathInCab}");
+                }
+
+                cfFile.Parent = Folders[cfFile.FolderIndex];
+                Folders[cfFile.FolderIndex].Files.Add(cfFile);
             }
         }
 

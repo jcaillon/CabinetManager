@@ -4,7 +4,9 @@ using System.Text;
 using CabinetManager.Utilities;
 
 namespace CabinetManager.core {
+    
     /// <summary>
+    /// <para>
     /// Each <see cref="CfFile"/> entry contains information about one of the files stored (or at least partially stored) in this cabinet.
     /// The first <see cref="CfFile"/> entry in each cabinet is found at absolute offset <see cref="CfCabinet.GetFirstFileEntryOffset()"/>.
     /// In a standard cabinet file the first <see cref="CfFile"/> entry immediately follows the last <see cref="CfFolder"/> entry.
@@ -13,10 +15,12 @@ namespace CabinetManager.core {
     /// <see cref="CfCabinet.GetFilesCount()"/> indicates how many of these entries are in the cabinet.
     /// The <see cref="CfFile"/> entries in a standard cabinet are ordered by <see cref="GetFolderIndex()"/> value, then by <see cref="UncompressedFileOffset"/>.
     /// Entries for files continued from the previous cabinet will be first, and entries for files continued to the next cabinet will be last.
+    ///</para>
     /// </summary>
-    class CfFile {
+    internal class CfFile {
+        
         /// <summary>
-        /// The maximum size for each individual file, size limitation of <see cref="CfFile.UncompressedFileSize"/>
+        /// The maximum size for each individual file, size limitation of <see cref="CfFile.UncompressedFileSize"/>.
         /// </summary>
         internal const uint FileMaximumSize = uint.MaxValue;
 
@@ -97,11 +101,11 @@ namespace CabinetManager.core {
         /// <summary>
         /// Extracts this file to an external path
         /// </summary>
-        /// <param name="cabStream"></param>
+        /// <param name="reader"></param>
         /// <param name="toPath"></param>
-        public void ExtractToFile(Stream cabStream, string toPath) {
+        public void ExtractToFile(BinaryReader reader, string toPath) {
             using (Stream targetStream = File.OpenWrite(toPath)) {
-                Parent.ExtractDataToStream(cabStream, targetStream, UncompressedFileOffset, UncompressedFileSize);
+                Parent.ExtractDataToStream(reader, targetStream, UncompressedFileOffset, UncompressedFileSize);
             }
 
             // TODO : set file's attributes
@@ -110,9 +114,8 @@ namespace CabinetManager.core {
         /// <summary>
         /// Write this instance of <see cref="CfFile"/> to a stream
         /// </summary>
-        public void WriteHeaderToStream(Stream stream) {
-            HeaderStreamPosition = stream.Position;
-            HeaderStreamPosition = stream.Position;
+        public void WriteFileHeader(BinaryWriter writer) {
+            HeaderStreamPosition = writer.BaseStream.Position;
 
             // use either ascii of UTF encoding
             Encoding nameEncoding = Encoding.ASCII;
@@ -123,56 +126,47 @@ namespace CabinetManager.core {
                 FileAttributes |= CfFileAttribs.NameIsUtf;
             }
 
-            stream.WriteAsByteArray(UncompressedFileSize);
-            stream.WriteAsByteArray(UncompressedFileOffset);
+            writer.Write(UncompressedFileSize);
+            writer.Write(UncompressedFileOffset);
             FolderIndex = GetFolderIndex();
-            stream.WriteAsByteArray(FolderIndex);
+            writer.Write(FolderIndex);
             DosDateTime.DateTimeToDosDateTimeUtc(FileDateTime, out ushort fatDate, out ushort fatTime);
-            stream.WriteAsByteArray(fatDate);
-            stream.WriteAsByteArray(fatTime);
-            stream.WriteAsByteArray((ushort) FileAttributes);
-            var lght = stream.WriteAsByteArray(RelativePathInCab, nameEncoding);
+            writer.Write(fatDate);
+            writer.Write(fatTime);
+            writer.Write((ushort) FileAttributes);
+            var lght = writer.WriteNullTerminatedString(RelativePathInCab, nameEncoding);
             if (lght >= CabPathMaximumLength) {
-                throw new CfCabException($"The file path ({RelativePathInCab}) exceeds the maximum autorised length of {CabPathMaximumLength} with {lght}");
+                throw new CfCabException($"The file path ({RelativePathInCab}) exceeds the maximum authorised length of {CabPathMaximumLength} with {lght}");
             }
         }
-
+        
         /// <summary>
         /// Read data from a stream to fill this <see cref="CfFile"/>
         /// </summary>
-        /// <param name="stream"></param>
-        public int ReadHeaderFromStream(Stream stream) {
-            HeaderStreamPosition = stream.Position;
-
-            int nbBytesRead = 0;
+        /// <param name="reader"></param>
+        public void ReadFileHeader(BinaryReader reader) {
+            HeaderStreamPosition = reader.BaseStream.Position;
 
             // u4 cbFile
-            nbBytesRead += stream.ReadAsByteArray(out uint uncompressedFileSize);
-            UncompressedFileSize = uncompressedFileSize;
+            UncompressedFileSize = reader.ReadUInt32();
             // u4 uoffFolderStart
-            nbBytesRead += stream.ReadAsByteArray(out uint uncompressedFileOffset);
-            UncompressedFileOffset = uncompressedFileOffset;
+            UncompressedFileOffset = reader.ReadUInt32();
             // u2 iFolder
-            nbBytesRead += stream.ReadAsByteArray(out ushort folderIndex);
-            FolderIndex = folderIndex;
+            FolderIndex = reader.ReadUInt16();
             // u2 date
-            nbBytesRead += stream.ReadAsByteArray(out ushort fatDate);
+            var fatDate = reader.ReadUInt16();
             // u2 time
-            nbBytesRead += stream.ReadAsByteArray(out ushort fatTime);
+            var fatTime = reader.ReadUInt16();
             FileDateTime = DosDateTime.DosDateTimeToDateTimeUtc(fatDate, fatTime);
             // u2 attribs
-            nbBytesRead += stream.ReadAsByteArray(out ushort fileAttributes);
-            FileAttributes = (CfFileAttribs) fileAttributes;
+            FileAttributes = (CfFileAttribs) reader.ReadUInt16();
             // char[] szName
             var nameEncoding = FileAttributes.HasFlag(CfFileAttribs.NameIsUtf) ? Encoding.UTF8 : Encoding.ASCII;
-            nbBytesRead += stream.ReadAsByteArray(out string cabPath, nameEncoding);
-            RelativePathInCab = cabPath;
+            RelativePathInCab = reader.ReadNullTerminatedString(nameEncoding);
 
-            if (nbBytesRead != FileHeaderLength) {
-                throw new CfCabException($"File info length expected {FileHeaderLength} vs actual {nbBytesRead}");
+            if (reader.BaseStream.Position - HeaderStreamPosition != FileHeaderLength) {
+                throw new CfCabException($"File info length expected {FileHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}");
             }
-
-            return nbBytesRead;
         }
 
         public override string ToString() {

@@ -2,7 +2,7 @@
 
 namespace CabinetManager.core {
     [Flags]
-    enum CfFileAttribs : ushort {
+    internal enum CfFileAttribs : ushort {
         None = 0,
         Rdonly = 0x01, /* file is read-only */
         Hiddden = 0x02, /* file is hidden */

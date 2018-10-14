@@ -2,7 +2,7 @@
 
 namespace CabinetManager.core {
     [Flags]
-    enum CfHeaderFlag : ushort {
+    internal enum CfHeaderFlag : ushort {
         /// <summary>
         /// is set if this cabinet file is not the first in a set of cabinet files.
         /// When this bit is set, the <see cref="CfCabinet.PreviousCabinetFileName"/> and <see cref="CfCabinet.PreviousCabinetPromptName"/> fields are present in this <see cref="CfCabinet"/>.

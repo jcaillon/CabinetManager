@@ -3,13 +3,17 @@ using System.Text;
 using CabinetManager.Utilities;
 
 namespace CabinetManager.core {
+    
     /// <summary>
+    /// <para>
     /// Each <see cref="CfData"/> record describes some amount of compressed data.
     /// The first <see cref="CfData"/> entry for each folder is located using <see cref="CfFolder.FirstDataBlockOffset"/>.
     /// Subsequent <see cref="CfData"/> records for this folder are contiguous.
     /// In a standard cabinet all the <see cref="CfData"/> entries are contiguous and in the same order as the <see cref="CfFolder"/> entries that refer them.
+    ///</para>
     /// </summary>
-    class CfData {
+    internal class CfData {
+        
         public const ushort MaxCompressedDataLength = ushort.MaxValue;
 
         private readonly CfFolder _parent;
@@ -74,13 +78,13 @@ namespace CabinetManager.core {
         /// <summary>
         /// Returns the uncompressed bytes for this <see cref="CfData"/>
         /// </summary>
-        /// <param name="stream"></param>
+        /// <param name="reader"></param>
         /// <returns></returns>
-        public byte[] GetUncompressedData(Stream stream) {
-            stream.Position = CompressedDataOffset;
+        public byte[] GetUncompressedData(BinaryReader reader) {
+            reader.BaseStream.Position = CompressedDataOffset;
             CompressedData = new byte[CompressedDataLength];
-            stream.Read(CompressedData, 0, CompressedData.Length);
-            byte[] uncompressedData = UncompressData(CompressedData);
+            reader.Read(CompressedData, 0, CompressedData.Length);
+            byte[] uncompressedData = _parent.UncompressData(CompressedData);
             CompressedData = null;
             return uncompressedData;
         }
@@ -88,58 +92,42 @@ namespace CabinetManager.core {
         /// <summary>
         /// Write this instance of <see cref="CfData"/> to a stream
         /// </summary>
-        public void WriteHeaderToStream(Stream stream) {
-            HeaderStreamPosition = stream.Position;
+        public void WriteDataHeader(BinaryWriter writer) {
+            writer.BaseStream.Position = HeaderStreamPosition;
 
-            // TODO : implement checksum!
-            stream.WriteAsByteArray(CheckSum);
-            stream.WriteAsByteArray(CompressedDataLength);
-            stream.WriteAsByteArray(UncompressedDataLength);
+            // TODO : implement checksum! : stream.WriteAsByteArray(CheckSum);
+            writer.Write((uint) 0);
+            writer.Write(CompressedDataLength);
+            writer.Write(UncompressedDataLength);
             if (DataReservedArea.Length > 0) {
-                stream.Write(DataReservedArea, 0, DataReservedArea.Length);
+                writer.Write(DataReservedArea, 0, DataReservedArea.Length);
             }
         }
 
         /// <summary>
         /// Read data from a stream to fill this <see cref="CfData"/>
         /// </summary>
-        /// <param name="stream"></param>
-        public int ReadHeaderFromStream(Stream stream) {
-            HeaderStreamPosition = stream.Position;
-            int nbBytesRead = 0;
+        /// <param name="reader"></param>
+        public void ReadHeader(BinaryReader reader) {
+            HeaderStreamPosition = reader.BaseStream.Position;
             // u4 csum
-            nbBytesRead += stream.ReadAsByteArray(out uint checkSum);
-            CheckSum = checkSum;
+            CheckSum = reader.ReadUInt32();
             // u2 cbData
-            nbBytesRead += stream.ReadAsByteArray(out ushort compressedDataLength);
-            CompressedDataLength = compressedDataLength;
+            CompressedDataLength = reader.ReadUInt16();
             // u2 cbUncomp
-            nbBytesRead += stream.ReadAsByteArray(out ushort uncompressedDataLength);
-            UncompressedDataLength = uncompressedDataLength;
+            UncompressedDataLength = reader.ReadUInt16();
             // u1[CFHEADER.cbCFData] abReserve(optional)
             if (_parent.DataReservedAreaSize > 0) {
                 DataReservedArea = new byte[_parent.DataReservedAreaSize];
-                nbBytesRead += stream.Read(DataReservedArea, 0, DataReservedArea.Length);
+                reader.Read(DataReservedArea, 0, DataReservedArea.Length);
             }
 
             // we can't overflow because the max size of a cab archive is uint.MaxValue!
-            CompressedDataOffset = (uint) stream.Position;
+            CompressedDataOffset = (uint) reader.BaseStream.Position;
 
-            if (nbBytesRead != DataHeaderLength) {
-                throw new CfCabException($"Data info length expected {DataHeaderLength} vs actual {nbBytesRead}");
+            if (reader.BaseStream.Position - HeaderStreamPosition != DataHeaderLength) {
+                throw new CfCabException($"Data info length expected {DataHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}");
             }
-
-            return nbBytesRead;
-        }
-
-        private byte[] CompressData(byte[] uncompressedData) {
-            // TODO : compression algo
-            return uncompressedData;
-        }
-
-        private byte[] UncompressData(byte[] compressedData) {
-            // TODO : compression algo
-            return compressedData;
         }
 
         public override string ToString() {

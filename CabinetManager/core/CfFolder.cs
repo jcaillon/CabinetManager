@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using CabinetManager.Utilities;
 
 namespace CabinetManager.core {
+    
     /// <summary>
+    /// <para>
     /// Each <see cref="CfFolder"/> contains information about one of the folders or partial folders stored in this cabinet file. 
     /// The first <see cref="CfFolder"/> entry immediately follows the <see cref="CfCabinet"/> entry and subsequent <see cref="CfFolder"/> records for this cabinet are contiguous. 
     /// <see cref="CfCabinet.FoldersCount"/> indicates how many <see cref="CfFolder"/> entries are present.
@@ -21,8 +24,10 @@ namespace CabinetManager.core {
     /// the folder is continued from the previous cabinet file.
     /// 
     /// The <see cref="CompressionType"/> field may vary from one folder to the next, unless the folder is continued from a previous cabinet file.
+    /// </para>
     /// </summary>
-    class CfFolder {
+    internal class CfFolder {
+        
         /// <summary>
         /// The maximum uncompressed size for each individual folder
         /// </summary>
@@ -62,7 +67,14 @@ namespace CabinetManager.core {
         /// <summary>
         /// compression type
         /// </summary>
-        public CfFolderTypeCompress CompressionType { get; set; }
+        public CfFolderTypeCompress CompressionType {
+            get => _compressionType;
+            set {
+                _dataCompressor = null;
+                _dataDecompressor = null;
+                _compressionType = value;
+            }
+        }
 
         /// <summary>
         /// if <see cref="CfHeaderFlag.CfhdrReservePresent"/> is set in <see cref="CfCabinet.Flags"/> and <see cref="CfCabinet.FolderReservedAreaSize"/> is non-zero,
@@ -85,17 +97,33 @@ namespace CabinetManager.core {
         /// </summary>
         private List<CfData> Data { get; set; } = new List<CfData>();
 
+        public long FolderUncompressedSize {
+            get {
+                long total = 0;
+                foreach (var file in Files) {
+                    total += file.UncompressedFileSize;
+                }
+                return total;
+            }
+        }
+
+        private IDataCompressor _dataCompressor;
+        
+        private IDataDecompressor _dataDecompressor;
+        
+        private CfFolderTypeCompress _compressionType;
+        
         /// <summary>
-        /// Reads data from <param name="sourceStream"></param> and read them into <param name="targetStream"></param>
+        /// Reads data from <param name="reader"></param> and read them into <param name="targetStream"></param>
         /// </summary>
-        /// <param name="sourceStream"></param>
+        /// <param name="reader"></param>
         /// <param name="targetStream"></param>
         /// <param name="uncompressedFileOffset"></param>
         /// <param name="uncompressedFileSize"></param>
-        public void ExtractDataToStream(Stream sourceStream, Stream targetStream, uint uncompressedFileOffset, uint uncompressedFileSize) {
+        public void ExtractDataToStream(BinaryReader reader, Stream targetStream, uint uncompressedFileOffset, uint uncompressedFileSize) {
             if (Data.Count == 0) {
                 // read data headers if needed
-                ReadDataHeaderFromStream(sourceStream);
+                ReadDataHeader(reader);
             }
 
             var uncompressedFileOffsetToRead = uncompressedFileOffset;
@@ -109,7 +137,7 @@ namespace CabinetManager.core {
                     uncompressedFileOffsetToRead <= dataBlock.UncompressedDataOffset + dataBlock.UncompressedDataLength) {
                     // the first byte of the uncompressed data will be found in this dataBlock
 
-                    byte[] uncompressedData = dataBlock.GetUncompressedData(sourceStream);
+                    byte[] uncompressedData = dataBlock.GetUncompressedData(reader);
 
                     var fileDataOffsetInThisBlockData = (int) uncompressedFileOffsetToRead - (int) dataBlock.UncompressedDataOffset;
                     var fileDataLengthReadInThisBlockData = Math.Min(dataBlock.UncompressedDataLength - fileDataOffsetInThisBlockData, (int) uncompressedFileLengthLeftToRead);
@@ -128,49 +156,42 @@ namespace CabinetManager.core {
         /// <summary>
         /// Write this instance of <see cref="CfFolder"/> to a stream
         /// </summary>
-        public void WriteHeaderToStream(Stream stream) {
-            HeaderStreamPosition = stream.Position;
+        public void WriteFolderHeader(BinaryWriter writer) {
+            HeaderStreamPosition = writer.BaseStream.Position;
 
-            stream.WriteAsByteArray(FirstDataBlockOffset);
-            stream.WriteAsByteArray(DataBlocksCount);
-            stream.WriteAsByteArray((ushort) CompressionType);
+            writer.Write(FirstDataBlockOffset);
+            writer.Write(DataBlocksCount);
+            writer.Write((ushort) CompressionType);
             if (FolderReservedArea.Length > 0) {
-                stream.Write(FolderReservedArea, 0, FolderReservedArea.Length);
+                writer.Write(FolderReservedArea, 0, FolderReservedArea.Length);
             }
         }
 
         /// <summary>
         /// Read data from a stream to fill this <see cref="CfFolder"/>
         /// </summary>
-        /// <param name="stream"></param>
-        public int ReadHeaderFromStream(Stream stream) {
-            HeaderStreamPosition = stream.Position;
+        /// <param name="reader"></param>
+        public void ReadFolderHeader(BinaryReader reader) {
+            HeaderStreamPosition = reader.BaseStream.Position;
 
-            int nbBytesRead = 0;
             // u4 coffCabStart
-            nbBytesRead += stream.ReadAsByteArray(out uint firstDataBlockOffset);
-            FirstDataBlockOffset = firstDataBlockOffset;
+            FirstDataBlockOffset = reader.ReadUInt32();
             // u2 cCFData
-            nbBytesRead += stream.ReadAsByteArray(out ushort dataBlocksCount);
-            DataBlocksCount = dataBlocksCount;
+            DataBlocksCount = reader.ReadUInt16();
             // u2 typeCompress
-            nbBytesRead += stream.ReadAsByteArray(out ushort compressionType);
-            CompressionType = (CfFolderTypeCompress) compressionType;
+            CompressionType = (CfFolderTypeCompress) reader.ReadUInt16();
 
             // u1[CFHEADER.cbCFFolder] abReserve(optional)
             if (_parent.FolderReservedAreaSize > 0) {
                 FolderReservedArea = new byte[_parent.FolderReservedAreaSize];
-                nbBytesRead += stream.Read(FolderReservedArea, 0, FolderReservedArea.Length);
             }
 
-            if (nbBytesRead != FolderHeaderLength) {
-                throw new CfCabException($"Folder info length expected {FolderHeaderLength} vs actual {nbBytesRead}");
+            if (reader.BaseStream.Position - HeaderStreamPosition != FolderHeaderLength) {
+                throw new CfCabException($"Folder info length expected {FolderHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}");
             }
-
-            return nbBytesRead;
         }
 
-        public void ReadDataHeaderFromStream(Stream stream) {
+        public void ReadDataHeader(BinaryReader reader) {
             if (DataBlocksCount == 0) {
                 throw new CfCabException($"The data block count is {DataBlocksCount}, read the folder header first or correct the data");
             }
@@ -179,8 +200,8 @@ namespace CabinetManager.core {
             var currentDataOffset = FirstDataBlockOffset;
             for (int i = 0; i < DataBlocksCount; i++) {
                 var cfData = new CfData(this);
-                stream.Position = currentDataOffset;
-                cfData.ReadHeaderFromStream(stream);
+                reader.BaseStream.Position = currentDataOffset;
+                cfData.ReadHeader(reader);
                 cfData.UncompressedDataOffset = currentUncompressedDataOffset;
                 Data.Add(cfData);
                 currentDataOffset = cfData.CompressedDataOffset + cfData.CompressedDataLength;
@@ -188,14 +209,40 @@ namespace CabinetManager.core {
             }
         }
 
-        public void UpdateDataBlockInfo(Stream stream) {
+        public void UpdateDataBlockInfo(BinaryWriter writer) {
             if (HeaderStreamPosition == 0) {
-                throw new CfCabException($"Write or read before updating");
+                throw new CfCabException("Write or read before updating");
             }
 
-            stream.Position = HeaderStreamPosition;
-            stream.WriteAsByteArray(FirstDataBlockOffset);
-            stream.WriteAsByteArray(DataBlocksCount);
+            writer.BaseStream.Position = HeaderStreamPosition;
+            writer.Write(FirstDataBlockOffset);
+            writer.Write(DataBlocksCount);
+        }
+        
+        public byte[] CompressData(byte[] uncompressedData) {
+            if (_dataCompressor == null) {
+                switch (CompressionType) {
+                    case CfFolderTypeCompress.None:
+                        _dataCompressor = new NoCompressionDataCompressor();
+                        break;
+                    default:
+                        throw new NotImplementedException($"Unimplemented compression type : {CompressionType}");
+                }
+            }
+            return _dataCompressor.CompressData(uncompressedData);
+        }
+
+        public byte[] UncompressData(byte[] compressedData) {
+            if (_dataDecompressor == null) {
+                switch (CompressionType) {
+                    case CfFolderTypeCompress.None:
+                        _dataDecompressor = new NoCompressionDataDecompressor();
+                        break;
+                    default:
+                        throw new NotImplementedException($"Unimplemented compression type : {CompressionType}");
+                }
+            }
+            return _dataDecompressor.DecompressData(compressedData);
         }
 
         public override string ToString() {

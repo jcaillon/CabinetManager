@@ -39,6 +39,10 @@
     <PackageOutputPath>$(OutputPath)</PackageOutputPath>
     <!-- allow pdb to be packed with the the nuget package (instead of having a separate pack for debug symbols) -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
+    <IncludeSource>true</IncludeSource>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <IsPackable>true</IsPackable>
   </PropertyGroup>
   <PropertyGroup Label="Compilation info">
     <!-- https://docs.microsoft.com/en-us/dotnet/standard/frameworks -->
@@ -56,6 +60,7 @@
     <!-- throw an exception on overflow instead of failing quietly -->
     <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <!-- <GenerateDocumentationFile>true</GenerateDocumentationFile> -->
   </PropertyGroup>
   <!-- DebugType -->
   <!-- Need to be full if you want .pdb files to work for .net framework <= 4.7.1, otherwise portable is ok -->

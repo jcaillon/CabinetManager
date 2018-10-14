@@ -26,23 +26,23 @@ namespace Oetools.Utilities.Archive {
         public CabProgressionType ProgressionType { get; set; }
 
         /// <summary>
-        ///     Gets the name of the file being processed. (The name of the file within the Archive; not the external
-        ///     file path.) Also includes the internal path of the file, if any.
+        /// Gets the name of the file being processed. (The name of the file within the Archive; not the external
+        /// file path.) Also includes the internal path of the file, if any.
         /// </summary>
         /// <value>
-        ///     The name of the file currently being processed, or null if processing
-        ///     is currently at the stream or archive level.
+        /// The name of the file currently being processed, or null if processing
+        /// is currently at the stream or archive level.
         /// </value>
-        public string CurrentFileName { get; private set; }
+        public string SourcePath { get; private set; }
         
-        public string ArchivedFileName { get; private set; }
+        public string RelativePathInArchive { get; private set; }
+        
+        public string ArchivedPath { get; private set; }
 
-        public Exception TreatmentException { get; private set; }
-
-        public CabProgressionEventArgs(CabProgressionType progressionType, string archiveFileName, string currentFileName, Exception treatmentException) {
-            ArchivedFileName = archiveFileName;
-            CurrentFileName = currentFileName;
-            TreatmentException = treatmentException;
+        public CabProgressionEventArgs(CabProgressionType progressionType, string archivePath, string sourcePath, string relativePathInArchive) {
+            ArchivedPath = archivePath;
+            SourcePath = sourcePath;
+            RelativePathInArchive = relativePathInArchive;
             ProgressionType = progressionType;
         }
     }

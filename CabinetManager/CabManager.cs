@@ -46,27 +46,34 @@ namespace CabinetManager {
 
         public void ExtractFileSet(IEnumerable<IFileInCabToExtract> filesToExtract) {
             foreach (var cabGroupedFiles in filesToExtract.GroupBy(f => f.CabPath)) {
-                if (string.IsNullOrEmpty(cabGroupedFiles.Key)) {
-                    throw new CabException("Invalid cab path, can't be null");
+                if (!File.Exists(cabGroupedFiles.Key)) {
+                    throw new CabException($"The cabinet file does not exist : {cabGroupedFiles.Key}.");
                 }
-
-                var cfCabinet = new CfCabinet(cabGroupedFiles.Key);
-                if (!cfCabinet.Exists) {
-                    throw new CabException($"The .cab doesn't exist : {cabGroupedFiles.Key}");
-                }
-
-                var filesInCab = cfCabinet.Folders.SelectMany(folder => folder.Files).ToList();
-
-                using (Stream stream = File.OpenRead(cabGroupedFiles.Key)) {
-                    foreach (var fileToExtractFromCab in cabGroupedFiles) {
-                        var fileInCab = filesInCab.FirstOrDefault(f => f.RelativePathInCab.Equals(fileToExtractFromCab.RelativePathInCab, StringComparison.CurrentCultureIgnoreCase));
-                        if (fileInCab == null) {
-                            throw new CabException($"The file {fileToExtractFromCab.RelativePathInCab ?? "null"} doesn't exist in {cabGroupedFiles.Key}");
+                try {
+                    // create all necessary extraction folders
+                    foreach (var extractDirGroupedFiles in cabGroupedFiles.GroupBy(f => Path.GetDirectoryName(f.ExtractionPath))) {
+                        if (!Directory.Exists(extractDirGroupedFiles.Key)) {
+                            Directory.CreateDirectory(extractDirGroupedFiles.Key);
                         }
-
-                        fileInCab.ExtractToFile(stream, fileToExtractFromCab.ExtractionPath);
                     }
+                    using (BinaryReader reader = new BinaryReader(File.OpenRead(cabGroupedFiles.Key))) {
+                        var cfCabinet = new CfCabinet(cabGroupedFiles.Key, reader);
+                        foreach (var fileToExtract in cabGroupedFiles) {
+                            _cancelToken?.ThrowIfCancellationRequested();
+                            try {
+                                cfCabinet.ExtractToFile(reader, fileToExtract.RelativePathInCab, fileToExtract.ExtractionPath);
+                            } catch (Exception e) {
+                                throw new CabException($"Failed to extract {fileToExtract.ExtractionPath} from {cabGroupedFiles.Key} and relative archive path {fileToExtract.RelativePathInCab}.", e);
+                            }
+                            OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.FinishFile, cabGroupedFiles.Key, fileToExtract.ExtractionPath, fileToExtract.RelativePathInCab));
+                        }
+                    }
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (Exception e) {
+                    throw new CabException($"Failed to unpack files from {cabGroupedFiles.Key}.", e);
                 }
+                OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.FinishArchive, cabGroupedFiles.Key, null, null));
             }
         }
 
@@ -76,14 +83,13 @@ namespace CabinetManager {
         }
         
         public string GetCabDetails(string archivePath) {
-            var cfCabinet = new CfCabinet(archivePath);
-            using (Stream stream = File.OpenRead(archivePath)) {
+            using (BinaryReader reader = new BinaryReader(File.OpenRead(archivePath))) {
+                var cfCabinet = new CfCabinet(archivePath, reader);
                 foreach (var cfFolder in cfCabinet.Folders) {
-                    cfFolder.ReadDataHeaderFromStream(stream);
+                    cfFolder.ReadDataHeader(reader);
                 }
+                return cfCabinet.ToString();
             }
-
-            return cfCabinet.ToString();
         }
 
         

@@ -67,7 +67,11 @@ namespace CabinetManagerTest.Tests {
                 var details = cabManager.GetCabDetails(cabGroupedFiles.Key);
             }
             
+            // verify
+            ListArchive(cabManager, windowsLibListFiles);
             
+            // extract
+            Extract(cabManager, windowsLibListFiles);
             
             var listFiles = GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "test1.cab"));
             //listFiles.AddRange(GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "test2.cab")));
