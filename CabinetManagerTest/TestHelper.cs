@@ -1,42 +1,27 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using CabinetManager;
 
 namespace CabinetManagerTest {
     public static class TestHelper {
         private static readonly string TestFolder = Path.Combine(AppContext.BaseDirectory, "Tests");
+        private static bool? _isRuntimeWindowsPlatform;
 
         public static string GetTestFolder(string testName) {
             var path = Path.Combine(TestFolder, testName);
             Directory.CreateDirectory(path);
             return path;
         }
-
-        public static void CreateSourceFiles(List<IFileToCab> listFiles) {
-            foreach (var file in listFiles) {
-                File.WriteAllText(file.SourcePath, Path.GetFileName(file.SourcePath));
+        
+        /// <summary>
+        /// Returns true if the current execution is done on windows platform
+        /// </summary>
+        public static bool IsRuntimeWindowsPlatform {
+            get {
+                return (_isRuntimeWindowsPlatform ?? (_isRuntimeWindowsPlatform = RuntimeInformation.IsOSPlatform(OSPlatform.Windows))).Value;
             }
-        }
-
-        public static List<IFileToCab> GetPackageTestFilesList(string testFolder, string outCab) {
-            return new List<IFileToCab> {
-                new FileToCab {
-                    SourcePath = Path.Combine(testFolder, "file1.txt"),
-                    CabFilePath = Path.Combine(testFolder, outCab),
-                    RelativePathInCab = "file1.txt"
-                },
-                new FileToCab {
-                    SourcePath = Path.Combine(testFolder, "file2.txt"),
-                    CabFilePath = Path.Combine(testFolder, outCab),
-                    RelativePathInCab = Path.Combine("subfolder1", "file2.txt")
-                },
-                new FileToCab {
-                    SourcePath = Path.Combine(testFolder, "file1.txt"),
-                    CabFilePath = Path.Combine(testFolder, $"_{outCab}"),
-                    RelativePathInCab = Path.Combine("subfolder1", "bla", "file3.txt")
-                }
-            };
         }
     }
 }

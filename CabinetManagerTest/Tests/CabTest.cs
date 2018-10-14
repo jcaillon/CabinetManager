@@ -5,10 +5,12 @@ using CabinetManager;
 using CabinetManagerTest.Compression;
 using CabinetManagerTest.Compression.Cab;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Oetools.Utilities.Archive;
+using Oetools.Utilities.Test.Archive;
 
 namespace CabinetManagerTest.Tests {
     [TestClass]
-    public class CabTest {
+    public class CabTest : ArchiveTest {
         private static string _testFolder;
         private static string TestFolder => _testFolder ?? (_testFolder = TestHelper.GetTestFolder(nameof(CabTest)));
 
@@ -27,64 +29,91 @@ namespace CabinetManagerTest.Tests {
         }
 
         [TestMethod]
-        public void CreateCab() {
-            CreateCabWithWindowsLib("out.cab");
-        }
+        public void Test() {
+            CabManager archiver = new CabManager();
 
-        [TestMethod]
-        public void ReadExistingCab() {
-            Cab cab = new Cab();
-            var details = cab.GetCabDetails(Path.Combine(TestFolder, "out.cab"));
-            var list = cab.ListFiles(Path.Combine(TestFolder, "out.cab"));
-            cab.ExtractFileSet(list
-                .Select(f => new FileToExtractFromCab {
-                    CabPath = f.CabPath,
-                    RelativePathInCab = f.RelativePathInCab,
-                    ToPath = Path.Combine(TestFolder, $"__{Path.GetFileName(f.RelativePathInCab)}")
-                } as IFileToExtractFromCab)
-                .ToList());
-        }
+            var windowsLibListFiles = GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "win_test1.cab"));
+            var filesInWinCabs = InitWithWindowsLib(windowsLibListFiles, CompressionLevel.None);
 
-        #region Windows Library
-
-        private List<IFileToCab> CreateCabWithWindowsLib(string cabName) {
-            List<IFileToCab> listFiles = TestHelper.GetPackageTestFilesList(TestFolder, cabName);
-            TestHelper.CreateSourceFiles(listFiles);
-            PackFileSet(listFiles, CompressionLevel.None);
+            var listFiles = GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "test1.cab"));
+            //listFiles.AddRange(GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "test2.cab")));
+            
+            CreateArchive(archiver, listFiles);
 
             // verify
-            foreach (var groupedFiles in listFiles.GroupBy(f => f.CabFilePath)) {
-                var files = ListFiles(groupedFiles.Key);
-                foreach (var file in files) {
-                    Assert.IsTrue(groupedFiles.ToList().Exists(f => f.RelativePathInCab.Equals(file.RelativePathInCab)));
-                }
-
-                Assert.AreEqual(groupedFiles.ToList().Count, files.Count);
-            }
-
-            return listFiles;
+            ListArchive(archiver, listFiles);
+            
+            // extract
+            Extract(archiver, listFiles);
+            
+            // delete files
+            DeleteFilesInArchive(archiver, listFiles);
         }
 
-        private void PackFileSet(List<IFileToCab> files, CompressionLevel compressionLevel) {
-            foreach (var cabGroupedFiles in files.GroupBy(f => f.CabFilePath)) {
+
+
+        [TestMethod]
+        public void CompareWithCabinetsProducedByWinApi() {
+            if (!TestHelper.IsRuntimeWindowsPlatform) {
+                return;
+            }
+            
+            CabManager cabManager = new CabManager();
+
+            var windowsLibListFiles = GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "win_test1.cab"));
+            var filesInWinCabs = InitWithWindowsLib(windowsLibListFiles, CompressionLevel.None);
+
+            foreach (var cabGroupedFiles in windowsLibListFiles.GroupBy(f => f.CabPath)) {
+                var details = cabManager.GetCabDetails(cabGroupedFiles.Key);
+            }
+            
+            
+            
+            var listFiles = GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "test1.cab"));
+            //listFiles.AddRange(GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "test2.cab")));
+
+        }
+
+        private IEnumerable<IFileInCab> InitWithWindowsLib(List<FileInCab> windowsLibListFiles, CompressionLevel level) {
+
+            foreach (var cabGroupedFiles in windowsLibListFiles.GroupBy(f => f.CabPath)) {
+                if (!Directory.Exists(cabGroupedFiles.Key)) {
+                    Directory.CreateDirectory(Path.GetDirectoryName(cabGroupedFiles.Key));
+                }
+            }
+            
+            // create .cab
+            foreach (var cabGroupedFiles in windowsLibListFiles.GroupBy(f => f.CabPath)) {
                 var cabInfo = new CabInfo(cabGroupedFiles.Key);
                 var filesDic = cabGroupedFiles.ToDictionary(file => file.RelativePathInCab, file => file.SourcePath);
-                cabInfo.PackFileSet(filesDic, compressionLevel, null);
+                cabInfo.PackFileSet(filesDic, level, null);
             }
+
+            var outputList = new List<FileInCab>();
+            foreach (var cabGroupedFiles in windowsLibListFiles.GroupBy(f => f.CabPath)) {
+                outputList.AddRange(
+                    new CabInfo(cabGroupedFiles.Key)
+                        .GetFiles()
+                        .Select(info => new FileInCab {
+                            RelativePathInCab = Path.Combine(info.Path, info.Name),
+                            SizeInBytes = (ulong) info.Length,
+                            LastWriteTime = info.LastWriteTime,
+                            CabPath = cabGroupedFiles.Key
+                        })
+                    );
+            }
+
+            // verify
+            foreach (var groupedTheoreticalFiles in windowsLibListFiles.GroupBy(f => f.CabPath)) {
+                var actualFiles = outputList.Where(f => f.CabPath.Equals(groupedTheoreticalFiles.Key)).ToList();
+                foreach (var theoreticalFile in groupedTheoreticalFiles) {
+                    Assert.IsTrue(actualFiles.ToList().Exists(f => f.RelativePathInCab.Replace("/", "\\").Equals(theoreticalFile.RelativePathInCab)), $"Can't find file in list : {theoreticalFile.RelativePathInCab}");
+                }
+                Assert.AreEqual(groupedTheoreticalFiles.Count(), actualFiles.Count, $"Wrong number of files listed : {groupedTheoreticalFiles.Count()}!={actualFiles.Count}");
+            }
+
+            return outputList;
         }
 
-        private List<IFileInCab> ListFiles(string archivePath) {
-            return new CabInfo(archivePath)
-                .GetFiles()
-                .Select(info => new FileInCab {
-                    RelativePathInCab = Path.Combine(info.Path, info.Name),
-                    SizeInBytes = (ulong) info.Length,
-                    LastWriteTime = info.LastWriteTime,
-                    CabPath = archivePath
-                } as IFileInCab)
-                .ToList();
-        }
-
-        #endregion
     }
 }

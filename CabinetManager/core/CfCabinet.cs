@@ -6,10 +6,13 @@ using System.Text;
 using CabinetManager.Utilities;
 
 namespace CabinetManager.core {
+    
     /// <summary>
+    /// <para>
     /// Each file stored in a cabinet is stored completely within a single folder. A cabinet file may contain one or more folders, or portions of a folder.
     /// A folder can span across multiple cabinets. Such a series of cabinet files form a set. Each cabinet file contains name information for the logically adjacent cabinet files.
-    /// Each folder contains one or more files. Throughout this discussion, cabinets are said to contain "files". This is for semantic purposes only.
+    /// Each folder contains one or more files.
+    /// 
     /// Cabinet files actually store streams of bytes, each with a name and some other common attributes.
     /// Whether these byte streams are actually files or some other kind of data is application-defined.
     /// 
@@ -17,8 +20,9 @@ namespace CabinetManager.core {
     /// a series of one or more cabinet file <see cref="CfFile"/> entries, and the actual compressed file data in <see cref="CfData"/> entries.
     /// The compressed file data in the <see cref="CfData"/> entry is stored in one of several compression formats,
     /// as indicated in the corresponding <see cref="CfFolder"/> structure. The compression encoding formats used are detailed in separate documents.
+    /// </para>
     /// </summary>
-    class CfCabinet {
+    internal class CfCabinet {
         public CfCabinet(string cabPath) {
             CabPath = cabPath;
             if (Exists) {

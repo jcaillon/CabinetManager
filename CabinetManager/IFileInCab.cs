@@ -1,8 +1,7 @@
 ﻿#region header
-
 // ========================================================================
 // Copyright (c) 2018 - Julien Caillon (julien.caillon@gmail.com)
-// This file (IFilePackaged.cs) is part of Oetools.Utilities.
+// This file (IFileArchived.cs) is part of Oetools.Utilities.
 // 
 // Oetools.Utilities is a free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -17,30 +16,20 @@
 // You should have received a copy of the GNU General Public License
 // along with Oetools.Utilities. If not, see <http://www.gnu.org/licenses/>.
 // ========================================================================
-
 #endregion
-
 using System;
 
-namespace CabinetManager {
-    public interface IFileInCab {
+namespace Oetools.Utilities.Archive {
+    public interface IFileInCab : IFileCabBase {
+               
         /// <summary>
-        ///     Path to the archive in which this file is archived
+        /// File size in bytes.
         /// </summary>
-        string CabPath { get; set; }
-
-        /// <summary>
-        /// Give the relative path of the file in the archive/package
-        /// </summary>
-        string RelativePathInCab { get; set; }
-
-        /// <summary>
-        /// File size in bytes
-        /// </summary>
+        /// <remarks>This is the real file size once extracted from the cabinet file.</remarks>
         ulong SizeInBytes { get; set; }
-
+        
         /// <summary>
-        /// Date last modified
+        /// Date last modified.
         /// </summary>
         DateTime LastWriteTime { get; set; }
     }

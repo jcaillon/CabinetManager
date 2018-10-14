@@ -16,4 +16,8 @@
     <ProjectReference Include="..\CabinetManager\CabinetManager.csproj" />
   </ItemGroup>
 
+  <PropertyGroup Label="Extra stuff">
+    <DefineConstants Condition=" '$(TargetFramework)'=='net461' ">$(DefineConstants);NET461;WINDOWSONLYBUILD</DefineConstants>
+  </PropertyGroup>
+
 </Project>

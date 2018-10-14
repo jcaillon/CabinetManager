@@ -1,7 +1,7 @@
 ﻿#region header
 // ========================================================================
 // Copyright (c) 2018 - Julien Caillon (julien.caillon@gmail.com)
-// This file (CompressionLvl.cs) is part of Oetools.Utilities.
+// This file (IFileToExtract.cs) is part of Oetools.Utilities.
 // 
 // Oetools.Utilities is a free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -18,8 +18,11 @@
 // ========================================================================
 #endregion
 namespace Oetools.Utilities.Archive {
-    public enum CabCompressionLevel {
-        /// <summary>Do not compress files, only store.</summary>
-        None
+    public interface IFileInCabToExtract : IFileCabBase {
+        
+        /// <summary>
+        /// The path to which this file should be extracted from the cabinet file.
+        /// </summary>
+        string ExtractionPath { get; }
     }
 }

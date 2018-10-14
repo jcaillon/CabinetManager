@@ -10,7 +10,7 @@ Status | Info
 [![Total downloads](https://img.shields.io/github/downloads/jcaillon/CabinetManager/total.svg)](https://github.com/jcaillon/CabinetManager/releases) | Total download
 [![GPLv3 licence](https://img.shields.io/badge/License-GPLv3-74A5C2.svg)](https://github.com/jcaillon/CabinetManager/blob/master/LICENSE) | GPLv3 License
 
-[![logo](docs/images/logo.png)](https://jcaillon.github.io/CabinetManager/)
+[![logo](docs/logo.png)](https://jcaillon.github.io/CabinetManager/)
 
 [AppVeyor]:http://www.appveyor.com/
 [Nuget]:https://www.nuget.org/packages/Noyacode.CabinetManager/
@@ -31,14 +31,6 @@ Note : c++ implementation -> https://github.com/coderforlife/ms-compress/tree/ma
 
 ## Thanks
 
-### Jetbrain
+This project was developped using an opensource license of the [rider by jetbrains](https://www.jetbrains.com/).
 
-This project was developped using an opensource license of the **awesome** :
-
-[![resharper](docs/images/resharper.png)](https://www.jetbrains.com/)
-
-### Icon8
-
-The Sakoe logo is provided by the **awesome** :
-
-[![icon8](https://png.icons8.com/color/48/000000/icons8-logo.png)](https://icons8.com/)
+The logo is provided by the [icons8](https://icons8.com/).
