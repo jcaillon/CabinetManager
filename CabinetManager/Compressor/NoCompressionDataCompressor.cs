@@ -23,5 +23,7 @@ namespace CabinetManager.Utilities {
         public byte[] CompressData(byte[] uncompressedData) {
             return uncompressedData;
         }
+
+        public ushort GetMaxGrowth() => 0;
     }
 }

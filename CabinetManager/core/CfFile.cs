@@ -12,17 +12,17 @@ namespace CabinetManager.core {
     /// In a standard cabinet file the first <see cref="CfFile"/> entry immediately follows the last <see cref="CfFolder"/> entry.
     /// Subsequent <see cref="CfFile"/> records for this cabinet are contiguous.
     /// 
-    /// <see cref="CfCabinet.GetFilesCount()"/> indicates how many of these entries are in the cabinet.
-    /// The <see cref="CfFile"/> entries in a standard cabinet are ordered by <see cref="GetFolderIndex()"/> value, then by <see cref="UncompressedFileOffset"/>.
+    /// <see cref="CfCabinet.FilesCount"/> indicates how many of these entries are in the cabinet.
+    /// The <see cref="CfFile"/> entries in a standard cabinet are ordered by <see cref="FolderIndex"/> value, then by <see cref="UncompressedFileOffset"/>.
     /// Entries for files continued from the previous cabinet will be first, and entries for files continued to the next cabinet will be last.
     ///</para>
     /// </summary>
     internal class CfFile {
         
         /// <summary>
-        /// The maximum size for each individual file, size limitation of <see cref="CfFile.UncompressedFileSize"/>.
+        /// The maximum uncompressed size for each individual file
         /// </summary>
-        internal const uint FileMaximumSize = uint.MaxValue;
+        internal const uint FileMaximumUncompressedSize = 0x7FFF8000;    
 
         internal CfFolder Parent { private get; set; }
 
@@ -63,13 +63,18 @@ namespace CabinetManager.core {
 
         /// <summary>
         /// Index of the folder containing this file's data. A value of zero indicates this is the first folder in this cabinet file.
-        /// The special <see cref="GetFolderIndex()"/> values <see cref="IfoldContinuedFromPrev"/> and <see cref="IfoldContinuedPrevAndNext"/> indicate that the folder index is actually zero,
+        /// The special <see cref="FolderIndex"/> values <see cref="IfoldContinuedFromPrev"/> and <see cref="IfoldContinuedPrevAndNext"/> indicate that the folder index is actually zero,
         /// but that extraction of this file would have to begin with the cabinet named in <see cref="CfCabinet.PreviousCabinetFileName"/>
-        /// The special <see cref="GetFolderIndex()"/> values <see cref="IfoldContinuedPrevAndNext"/> and <see cref="IfoldContinuedToNext"/> indicate that the folder index is actually one less
-        /// than <see cref="CfCabinet.GetFoldersCount()"/>, and that extraction of this file will require continuation to the cabinet named in <see cref="CfCabinet.NextCabinetFileName"/>
+        /// The special <see cref="FolderIndex"/> values <see cref="IfoldContinuedPrevAndNext"/> and <see cref="IfoldContinuedToNext"/> indicate that the folder index is actually one less
+        /// than <see cref="CfCabinet.FoldersCount"/>, and that extraction of this file will require continuation to the cabinet named in <see cref="CfCabinet.NextCabinetFileName"/>
         /// </summary>
-        public ushort FolderIndex { get; private set; }
+        public ushort FolderIndex {
+            get => Math.Max(_folderIndex, Parent?.FolderIndex ?? 0);
+            set => _folderIndex = value;
+        }
 
+        private ushort _folderIndex;
+        
         /// <summary>
         /// File date time
         /// </summary>
@@ -91,24 +96,16 @@ namespace CabinetManager.core {
         private long HeaderStreamPosition { get; set; }
 
         /// <summary>
-        /// Index of the folder containing this file's data. A value of zero indicates this is the first folder in this cabinet file
-        /// </summary>
-        /// <returns></returns>
-        public ushort GetFolderIndex() {
-            return Parent.FolderIndex;
-        }
-
-        /// <summary>
         /// Extracts this file to an external path
         /// </summary>
         /// <param name="reader"></param>
         /// <param name="toPath"></param>
         public void ExtractToFile(BinaryReader reader, string toPath) {
             using (Stream targetStream = File.OpenWrite(toPath)) {
-                Parent.ExtractDataToStream(reader, targetStream, UncompressedFileOffset, UncompressedFileSize);
+                Parent.ExtractData(reader, targetStream, UncompressedFileOffset, UncompressedFileSize);
             }
 
-            // TODO : set file's attributes
+            // TODO : set extracted file attributes
         }
 
         /// <summary>
@@ -128,7 +125,6 @@ namespace CabinetManager.core {
 
             writer.Write(UncompressedFileSize);
             writer.Write(UncompressedFileOffset);
-            FolderIndex = GetFolderIndex();
             writer.Write(FolderIndex);
             DosDateTime.DateTimeToDosDateTimeUtc(FileDateTime, out ushort fatDate, out ushort fatTime);
             writer.Write(fatDate);
@@ -137,6 +133,10 @@ namespace CabinetManager.core {
             var lght = writer.WriteNullTerminatedString(RelativePathInCab, nameEncoding);
             if (lght >= CabPathMaximumLength) {
                 throw new CfCabException($"The file path ({RelativePathInCab}) exceeds the maximum authorised length of {CabPathMaximumLength} with {lght}");
+            }
+            
+            if (writer.BaseStream.Position - HeaderStreamPosition != FileHeaderLength) {
+                throw new CfCabException($"File info length expected {FileHeaderLength} vs actual {writer.BaseStream.Position - HeaderStreamPosition}");
             }
         }
         

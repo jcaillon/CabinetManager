@@ -21,5 +21,6 @@
 namespace CabinetManager.Utilities {
     public interface IDataCompressor {
         byte[] CompressData(byte[] uncompressedData);
+        ushort GetMaxGrowth();
     }
 }

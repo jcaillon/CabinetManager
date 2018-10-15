@@ -63,9 +63,15 @@ namespace CabinetManagerTest.Tests {
             var windowsLibListFiles = GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "win_test1.cab"));
             var filesInWinCabs = InitWithWindowsLib(windowsLibListFiles, CompressionLevel.None);
 
+            var details = cabManager.GetCabDetails(@"C:\data\repo\_github\CabinetManager\CabinetManagerTest\bin\Debug\netcoreapp2.0\Tests\CabTest\archives\test1.cab~3ujzoson.ovc.cab");
+            
             foreach (var cabGroupedFiles in windowsLibListFiles.GroupBy(f => f.CabPath)) {
-                var details = cabManager.GetCabDetails(cabGroupedFiles.Key);
+                details = cabManager.GetCabDetails(cabGroupedFiles.Key);
             }
+            
+            var listFiles = GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "test1.cab"));
+            cabManager.PackFileSet(listFiles);
+            
             
             // verify
             ListArchive(cabManager, windowsLibListFiles);
@@ -73,7 +79,6 @@ namespace CabinetManagerTest.Tests {
             // extract
             Extract(cabManager, windowsLibListFiles);
             
-            var listFiles = GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "test1.cab"));
             //listFiles.AddRange(GetPackageTestFilesList(TestFolder, Path.Combine(TestFolder, "archives", "test2.cab")));
 
         }

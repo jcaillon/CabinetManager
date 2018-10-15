@@ -4,7 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using CabinetManager.Utilities;
-using Oetools.Utilities.Archive;
 
 namespace CabinetManager.core {
     
@@ -23,28 +22,36 @@ namespace CabinetManager.core {
     /// as indicated in the corresponding <see cref="CfFolder"/> structure. The compression encoding formats used are detailed in separate documents.
     /// </para>
     /// </summary>
-    internal class CfCabinet {
-        public CfCabinet(string cabPath, BinaryReader reader = null) {
+    internal class CfCabinet : IDisposable {
+        
+        public CfCabinet(string cabPath) {
             CabPath = cabPath;
             if (Exists) {
-                if (reader != null) {
-                    ReadCabinetInfo(reader);
-                } else {
-                    using (BinaryReader reader2 = new BinaryReader(File.OpenRead(cabPath))) {
-                        ReadCabinetInfo(reader2);
-                    }
-                }
+                _reader = new BinaryReader(File.OpenRead(cabPath));
+                ReadCabinetInfo(_reader);
             }
         }
 
-        // cab 1.3
-        private const byte CabVersionMajor = 1;
-        private const byte CabVersionMinor = 3;
+        public void Dispose() {
+            NextCabinet?.Dispose();
+            _reader?.Dispose();
+        }
+
+        private BinaryReader _reader;
 
         /// <summary>
         /// The maximum size for this cabinet file, size limitation of <see cref="CabinetSize"/>
         /// </summary>
-        internal const uint CabinetMaximumSize = uint.MaxValue;
+        internal const uint CabinetMaximumSize = int.MaxValue; // 0x7FFFFFFF
+        
+        /// <summary>
+        /// The maximum number of files to store in a single cabinet.
+        /// </summary>
+        internal const uint CabinetMaximumFileCount = ushort.MaxValue; // 0xFFFF
+        
+        // cab 1.3
+        private const byte CabVersionMajor = 1;
+        private const byte CabVersionMinor = 3;
 
         /// <summary>
         /// The maximum length for the next/previous cabinet/prompt
@@ -61,7 +68,7 @@ namespace CabinetManager.core {
         /// </summary>
         private const uint HeaderLengthWithoutOptions = 36; // (1+1+1+1)+4+4+4+4+4+1+1+2+2+2+2+2
 
-        private readonly byte[] _signature = new[] {(byte) 0x4D, (byte) 0x53, (byte) 0x43, (byte) 0x46}; /* cab file signature : MSCF */
+        private readonly byte[] _signature = {0x4D, 0x53, 0x43, 0x46}; /* cab file signature : MSCF */
 
         private uint _reserved1; /* reserved = 0 */
 
@@ -75,7 +82,12 @@ namespace CabinetManager.core {
         /// <summary>
         /// offset of the first <see cref="CfFile"/> entry
         /// </summary>
-        internal uint FirstFileEntryOffset { get; private set; }
+        internal uint FirstFileEntryOffset {
+            get => Math.Max(_firstFileEntryOffset, HeaderLength + (uint) Folders.Sum(f => f.FolderHeaderLength));
+            set => _firstFileEntryOffset = value;
+        }
+
+        private uint _firstFileEntryOffset;
 
         private uint _reserved3; /* reserved = 0 */
         private byte _versionMinor = CabVersionMinor; /* cabinet file format version, minor */
@@ -84,12 +96,22 @@ namespace CabinetManager.core {
         /// <summary>
         /// number of <see cref="CfFolder"/> entries in this cabinet
         /// </summary>
-        public ushort FoldersCount { get; private set; }
+        public ushort FoldersCount {
+            get => Math.Max(_foldersCount, (ushort) Folders.Count);
+            set => _foldersCount = value;
+        }
+
+        private ushort _foldersCount;
 
         /// <summary>
         /// number of <see cref="CfFile"/> entries in this cabinet
         /// </summary>
-        public ushort FilesCount { get; private set; }
+        public ushort FilesCount {
+            get => Math.Max(_filesCount, (ushort) Folders.SelectMany(f => f.Files).Count());
+            set => _filesCount = value;
+        }
+
+        private ushort _filesCount;
 
         /// <summary>
         /// Bit-mapped values that indicate the presence of optional data
@@ -113,12 +135,12 @@ namespace CabinetManager.core {
         /// <summary>
         /// (optional) size of per-folder reserved area, need the CfhdrReservePresent flag
         /// </summary>
-        public byte FolderReservedAreaSize { get; set; } = 0;
+        public byte FolderReservedAreaSize { get; set; }
 
         /// <summary>
         /// (optional) size of per-datablock reserved area, need the CfhdrReservePresent flag
         /// </summary>
-        public byte DataReservedAreaSize { get; set; } = 0;
+        public byte DataReservedAreaSize { get; set; }
 
         /// <summary>
         /// (optional)
@@ -162,13 +184,20 @@ namespace CabinetManager.core {
         /// <summary>
         /// List of folders in this cabinet
         /// </summary>
-        public List<CfFolder> Folders { get; set; } = new List<CfFolder>();
+        private List<CfFolder> Folders { get; } = new List<CfFolder>();
 
         /// <summary>
         /// The absolute file path of this .cab
         /// </summary>
-        public string CabPath { get; set; }
+        public string CabPath { get; }
 
+        /// <summary>
+        /// Temporary cab path to write to
+        /// </summary>
+        private string CabPathToWrite => _cabPathToWrite ?? (_cabPathToWrite = $"{CabPath}~{Path.GetRandomFileName()}");
+
+        private string _cabPathToWrite;
+        
         /// <summary>
         /// The number of byte needed for the header info
         /// </summary>
@@ -193,30 +222,6 @@ namespace CabinetManager.core {
         }
 
         /// <summary>
-        /// offset of the first <see cref="CfFile"/> entry
-        /// </summary>
-        /// <returns></returns>
-        internal uint GetFirstFileEntryOffset() {
-            return HeaderLength + (uint) Folders.Sum(f => f.FolderHeaderLength);
-        }
-
-        /// <summary>
-        /// number of <see cref="CfFolder"/> entries in this cabinet
-        /// </summary>
-        /// <returns></returns>
-        internal ushort GetFoldersCount() {
-            return (ushort) Folders.Count;
-        }
-
-        /// <summary>
-        /// number of <see cref="CfFile"/> entries in this cabinet
-        /// </summary>
-        /// <returns></returns>
-        internal ushort GetFilesCount() {
-            return (ushort) Folders.SelectMany(f => f.Files).Count();
-        }
-
-        /// <summary>
         /// Returns true if this cabinet exists
         /// </summary>
         public bool Exists => File.Exists(CabPath);
@@ -226,6 +231,12 @@ namespace CabinetManager.core {
         /// </summary>
         internal CfCabinet NextCabinet { get; private set; }
 
+        /// <summary>
+        /// Returns the complete list of files in this cabinet (and contiguous cabinet if they exist
+        /// </summary>
+        /// <returns></returns>
+        public IEnumerable<CfFile> GetFiles() => Folders.SelectMany(f => f.Files).Concat(NextCabinet?.GetFiles() ?? Enumerable.Empty<CfFile>());
+        
         /// <summary>
         /// Read data from <see cref="CabPath"/> to fill this <see cref="CfCabinet"/>
         /// </summary>
@@ -246,38 +257,50 @@ namespace CabinetManager.core {
                     throw new CfCabException($"Could not find the next cabinet file {NextCabinetFileName} in {cabDirectory}");
                 }
 
-                using (BinaryReader nextCabReader = new BinaryReader(File.OpenRead(nextCabinetFilePath))) {
-                    NextCabinet = new CfCabinet(nextCabinetFilePath, nextCabReader);
+                NextCabinet = new CfCabinet(nextCabinetFilePath);
                     
-                    // crash now because we won't be able to correctly read data later anyway...
-                    throw new NotImplementedException("The management of several consecutive cabinet files is not implemented yet");
-                }
+                // crash now because we won't be able to correctly read data later anyway...
+                throw new NotImplementedException("The management of several consecutive cabinet files is not implemented yet");
             }
         }
 
+        /// <summary>
+        /// Add a new external file to this cabinet file.
+        /// </summary>
+        /// <param name="sourcePath"></param>
+        /// <param name="relativePathInCab"></param>
+        /// <exception cref="CfCabException"></exception>
         public void AddExternalFile(string sourcePath, string relativePathInCab) {
+
+            if (FilesCount + 1 > CabinetMaximumFileCount) {
+                throw new CfCabException($"The cabinet would exceed the maximum number of files in a single cabinet: {CabinetMaximumFileCount}.");
+            }
+            
+            // remove existing files with the same name
             foreach (var folder in Folders) {
                 if (folder.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase)) > 0) {
+                    // case of a file split into several cabinets
+                    NextCabinet?.Folders.FirstOrDefault()?.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
                     break;
                 }
             }
 
             var fileInfo = new FileInfo(sourcePath);
             var fileInfoLength = fileInfo.Length;
-            if (fileInfo.Length > CfFile.FileMaximumSize) {
-                throw new CfCabException($"The file exceeds the maximum size of {CfFile.FileMaximumSize} with a length of {fileInfoLength} bytes.");
+            if (fileInfo.Length > CfFile.FileMaximumUncompressedSize) {
+                throw new CfCabException($"The file exceeds the maximum size of {CfFile.FileMaximumUncompressedSize} with a length of {fileInfoLength} bytes.");
             }
 
-            var idx = 0;
+            ushort idx = 0;
             while (true) {
                 if (idx >= Folders.Count) {
                     Folders.Add(new CfFolder(this));
+                    Folders[idx].FolderIndex = idx;
                 }
-
-                if (Folders[idx].FolderUncompressedSize + fileInfoLength <= CfFolder.FolderMaximumUncompressedSize) {
+                if (Folders[idx].FolderUncompressedSize + fileInfoLength <= CfFolder.FolderMaximumUncompressedSize &&
+                    Folders[idx].Files.Count + 1 <= CfFolder.FolderMaximumFileCount) {
                     break;
                 }
-
                 idx++;
             }
 
@@ -295,59 +318,35 @@ namespace CabinetManager.core {
         /// <summary>
         /// Extracts a file to an external path.
         /// </summary>
-        /// <param name="reader"></param>
         /// <param name="relativePathInCab"></param>
         /// <param name="extractionPath"></param>
-        public void ExtractToFile(BinaryReader reader, string relativePathInCab, string extractionPath) {
+        public void ExtractToFile(string relativePathInCab, string extractionPath) {
             var fileInCab = Folders.SelectMany(folder => folder.Files).FirstOrDefault(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
-            fileInCab?.ExtractToFile(reader, extractionPath);
+            fileInCab?.ExtractToFile(_reader, extractionPath);
         }
         
         /// <summary>
-        /// Write this instance of <see cref="CfCabinet"/> to a stream
+        /// Save this instance of <see cref="CfCabinet"/> to <see cref="CabPath"/>.
         /// </summary>
-        /// <param name="writer"></param>
-        private void Write(BinaryWriter writer) {
-            writer.BaseStream.Position = 0;
-            
-            WriteHeaderToStream(writer);
-            WriteFileAndFolderHeaders(writer);
-
-            WriteData(writer);
-        }
-
-        private void WriteFileAndFolderHeaders(BinaryWriter writer) {
-            foreach (var folder in Folders.OrderBy(f => f.FolderIndex)) {
-                folder.WriteFolderHeader(writer);
+        public void Save(CfFolderTypeCompress compressionType) {
+            var cabDirectory = Path.GetDirectoryName(CabPathToWrite);
+            if (!Directory.Exists(cabDirectory)) {
+                Directory.CreateDirectory(cabDirectory);
             }
-
-            foreach (var folder in Folders.OrderBy(f => f.FolderIndex)) {
-                // files are supposed to be sorted by folder index then by uncompressed size
-                foreach (var file in folder.Files.OrderBy(f => f.UncompressedFileSize)) {
-                    file.WriteFileHeader(writer);
+            try {
+                using (var writer = new BinaryWriter(File.OpenWrite(CabPathToWrite))) {
+                    writer.BaseStream.Position = 0;
+                    WriteHeaderToStream(writer);
+                    WriteFileAndFolderHeaders(writer, compressionType);
+                    WriteData(writer);
+                    UpdateCabinetSize(writer);
+                }
+            } finally {
+                // get rid of the temp file
+                if (File.Exists(CabPathToWrite)) {
+                    // TODO : File.Delete(CabPathToWrite);
                 }
             }
-        }
-
-        private void WriteData(BinaryWriter writer) {
-            // write data
-            //// write compressed data
-            //// TODO : compression algo
-            //using(Stream source = File.OpenRead(path)) {
-            //    byte[] buffer = new byte[2048];
-            //    int bytesRead;
-            //    while((bytesRead = source.Read(buffer, 0, buffer.Length)) > 0) {
-            //        stream.Write(buffer, 0, bytesRead);
-            //    }
-            //}
-
-            // update DATA BLOCK info for each CfFolder and Update the stream
-            //foreach (var folder in Folders) {
-            //    folder.DataBlocksCount = 0;
-            //    folder.FirstDataBlockOffset = GetFirstFileEntryOffset() + (uint) Folders.SelectMany(f => f.Files).Sum(f => f.FileHeaderLength) + 0;
-            //    folder.UpdateDataBlockInfo(stream);
-            //}
-            
         }
         
         private void WriteHeaderToStream(BinaryWriter writer) {
@@ -355,20 +354,16 @@ namespace CabinetManager.core {
             writer.Write(_reserved1);
             writer.Write(CabinetSize);
             writer.Write(_reserved2);
-            FirstFileEntryOffset = GetFirstFileEntryOffset();
             writer.Write(FirstFileEntryOffset);
             writer.Write(_reserved3);
             writer.Write(_versionMinor);
             writer.Write(_versionMajor);
-            FoldersCount = GetFoldersCount();
             writer.Write(FoldersCount);
-            FilesCount = GetFilesCount();
             writer.Write(FilesCount);
             writer.Write((ushort) Flags);
             if (SetId == 0) {
                 SetId = (ushort) new Random().Next(ushort.MaxValue);
             }
-
             writer.Write(SetId);
             writer.Write(CabinetNumber);
 
@@ -411,6 +406,44 @@ namespace CabinetManager.core {
                     throw new CfCabException($"NextCabinetPromptName ({NextCabinetPromptName}) exceeds the maximum authorised length of {CabFileNameMaximumLength} with {lght}.");
                 }
             }
+        }
+
+        private void WriteFileAndFolderHeaders(BinaryWriter writer, CfFolderTypeCompress compressionType) {
+            foreach (var folder in Folders) { // .OrderBy(f => f.FolderIndex)
+                folder.CompressionType = compressionType;
+                folder.WriteFolderHeader(writer);
+            }
+
+            uint uncompressedFileOffset = 0;
+            foreach (var folder in Folders) { // .OrderBy(f => f.FolderIndex)
+                
+                // files are supposed to be sorted by folder index then by uncompressed size
+                foreach (var file in folder.Files) { // .OrderBy(f => f.UncompressedFileSize)
+                    file.UncompressedFileOffset = uncompressedFileOffset;
+                    file.WriteFileHeader(writer);
+                    uncompressedFileOffset += file.UncompressedFileSize;
+                }
+            }
+        }
+
+        private void WriteData(BinaryWriter writer) {
+            foreach (var folder in Folders) { // .OrderBy(f => f.FolderIndex)
+                folder.FirstDataBlockOffset = (uint) writer.BaseStream.Position;
+                folder.SaveFolder(_reader, writer);
+                folder.UpdateDataBlockInfo(writer);
+            }
+        }
+        
+        private void UpdateCabinetSize(BinaryWriter writer) {
+            if (writer.BaseStream.Length > CabFileNameMaximumLength) {
+                throw new CfCabException($"The cabinet size exceeds the maximum of ({CabFileNameMaximumLength}) bytes with {writer.BaseStream.Length}.");
+            }
+            CabinetSize = (uint) writer.BaseStream.Length;
+
+            var previousStreamPos = writer.BaseStream.Position;
+            writer.BaseStream.Position = 8;
+            writer.Write(CabinetSize);
+            writer.BaseStream.Position = previousStreamPos;
         }
 
         private void ReadCabinetHeader(BinaryReader reader) {
@@ -491,20 +524,50 @@ namespace CabinetManager.core {
                 Folders.Add(cfFolder);
             }
 
+            FoldersCount = 0;
+
             for (int i = 0; i < FilesCount; i++) {
                 var cfFile = new CfFile(null);
                 cfFile.ReadFileHeader(reader);
                 if (cfFile.FolderIndex >= Folders.Count) {
-                    throw new CfCabException($"Invalid folder index ({cfFile.FolderIndex}) for file {cfFile.RelativePathInCab}");
+                    throw new CfCabException($"Invalid folder index ({cfFile.FolderIndex}) for file {cfFile.RelativePathInCab}.");
                 }
-
                 cfFile.Parent = Folders[cfFile.FolderIndex];
+                cfFile.FolderIndex = 0;
                 Folders[cfFile.FolderIndex].Files.Add(cfFile);
             }
+
+            FilesCount = 0;
+            FirstFileEntryOffset = 0;
+        }
+
+        /// <summary>
+        /// Returns the compressed data of the first data block of the cabinet.
+        /// </summary>
+        /// <remarks>This is used to read a data block that continues on a next cabinet file.</remarks>
+        /// <param name="uncompressedDataLength"></param>
+        /// <returns></returns>
+        internal byte[] GetFirstDataBlockCompressedData(out ushort uncompressedDataLength) {
+            if (Folders.Count == 0) {
+                throw new CfCabException($"Could not get the first data block compressed data because there are no folders in the cabinet {CabPath}.");
+            }
+            return Folders[0].GetFirstDataBlockCompressedData(_reader, out uncompressedDataLength);
+        }
+
+        /// <summary>
+        /// Returns a text representation of this cabinet file
+        /// </summary>
+        /// <returns></returns>
+        public string GetStringFullRepresentation() {
+            foreach (var folder in Folders) {
+                folder.ReadDataHeader(_reader);
+            }
+            return ToString();
         }
 
         public override string ToString() {
             var returnedValue = new StringBuilder();
+            
             returnedValue.AppendLine("====== HEADER ======");
             returnedValue.AppendLine($"{nameof(_signature)} = {Encoding.Default.GetString(_signature)}");
             returnedValue.AppendLine($"{nameof(_reserved1)} = {_reserved1}");

@@ -130,7 +130,7 @@ namespace CabinetManager.Utilities {
             encoding = encoding ?? Encoding.ASCII;
             var bytes = encoding.GetBytes(val);
             writer.Write(bytes, 0, bytes.Length);
-            writer.Write(0); // NULL ending string
+            writer.Write((byte) 0); // NULL ending string
             return bytes.Length + 1;
         }
     }

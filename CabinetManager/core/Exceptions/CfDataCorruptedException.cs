@@ -1,7 +1,7 @@
 #region header
 // ========================================================================
 // Copyright (c) 2018 - Julien Caillon (julien.caillon@gmail.com)
-// This file (NoCompressionDataDecompressor.cs) is part of CabinetManager.
+// This file (CfDataCorruptedException.cs) is part of CabinetManager.
 // 
 // CabinetManager is a free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -18,12 +18,10 @@
 // ========================================================================
 #endregion
 
-namespace CabinetManager.Utilities {
-    public class NoCompressionDataDecompressor : IDataDecompressor {
-        public byte[] DecompressData(byte[] compressedData) {
-            return compressedData;
-        }
+using System;
 
-        public ushort GetMaxGrowth() => 0;
+namespace CabinetManager.core {
+    public class CfDataCorruptedException : Exception {
+        public CfDataCorruptedException(string message) : base(message) { }
     }
 }

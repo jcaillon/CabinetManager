@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using System;
+using System.IO;
 using System.Text;
 using CabinetManager.Utilities;
 
@@ -10,11 +11,18 @@ namespace CabinetManager.core {
     /// The first <see cref="CfData"/> entry for each folder is located using <see cref="CfFolder.FirstDataBlockOffset"/>.
     /// Subsequent <see cref="CfData"/> records for this folder are contiguous.
     /// In a standard cabinet all the <see cref="CfData"/> entries are contiguous and in the same order as the <see cref="CfFolder"/> entries that refer them.
+    /// Blocks are compressed individually using the <see cref="CfFolder.CompressionType"/>.
     ///</para>
     /// </summary>
     internal class CfData {
         
-        public const ushort MaxCompressedDataLength = ushort.MaxValue;
+        /// <summary>
+        /// CAB data blocks max size in bytes in uncompressed form.
+        /// Uncompressed blocks have zero growth. MSZIP guarantees that it won't grow above
+        /// uncompressed size by more than 12 bytes. LZX guarantees it won't grow
+        /// more than 6144 bytes.
+        /// </summary>
+        public const ushort MaxUncompressedDataLength = 32768;
 
         private readonly CfFolder _parent;
 
@@ -61,14 +69,14 @@ namespace CabinetManager.core {
         private byte[] CompressedData { get; set; }
 
         /// <summary>
-        /// Offset at which to read this <see cref="CompressedData"/>
+        /// Offset in cabinet stream at which to read the <see cref="CompressedData"/>.
         /// </summary>
-        public uint CompressedDataOffset { get; private set; }
+        internal long CompressedDataOffset { get; private set; }
 
         /// <summary>
-        /// This data contains the bytes that are positionned at <see cref="UncompressedDataOffset"/> in the uncompressed stream
+        /// This data block contains the bytes that are positioned at <see cref="UncompressedDataOffset"/> in the uncompressed stream.
         /// </summary>
-        public long UncompressedDataOffset { get; set; }
+        internal long UncompressedDataOffset { get; set; }
 
         /// <summary>
         /// Stream position at which we can write this <see cref="CfData"/> header
@@ -80,28 +88,107 @@ namespace CabinetManager.core {
         /// </summary>
         /// <param name="reader"></param>
         /// <returns></returns>
-        public byte[] GetUncompressedData(BinaryReader reader) {
+        public byte[] ReadUncompressedData(BinaryReader reader) {
             reader.BaseStream.Position = CompressedDataOffset;
-            CompressedData = new byte[CompressedDataLength];
-            reader.Read(CompressedData, 0, CompressedData.Length);
-            byte[] uncompressedData = _parent.UncompressData(CompressedData);
-            CompressedData = null;
+
+            byte[] completeCompressedData;
+            ushort completeUncompressedDataLength;
+            
+            if (UncompressedDataLength == 0) {
+                // the compressed data in this data block is only partial and should be continued in the next cabinet file
+                var nextCompressedData = _parent.GetNextCabinetFirstDataBlockCompressedData(out completeUncompressedDataLength);
+                
+                completeCompressedData = new byte[CompressedDataLength + nextCompressedData.Length];
+                Array.Copy(nextCompressedData, 0, completeCompressedData, CompressedDataLength, nextCompressedData.Length);
+
+                var thisBlockCompressedData = ReadCompressedData(reader);
+                Array.Copy(thisBlockCompressedData, completeCompressedData, thisBlockCompressedData.Length);
+            } else {
+                completeUncompressedDataLength = UncompressedDataLength;
+                completeCompressedData = ReadCompressedData(reader);
+            }
+            
+            var uncompressedData = _parent.UncompressData(completeCompressedData);
+            if (completeUncompressedDataLength != 0 && completeUncompressedDataLength != uncompressedData.Length) {
+                throw new CfDataCorruptedException($"Corrupted data block, the expected uncompressed data length is {completeUncompressedDataLength} but the actual is {uncompressedData.Length}.");
+            }
+            
             return uncompressedData;
+        }
+        
+        /// <summary>
+        /// Returns the compressed bytes for this <see cref="CfData"/>
+        /// </summary>
+        /// <param name="reader"></param>
+        /// <returns></returns>
+        public byte[] ReadCompressedData(BinaryReader reader) {
+            reader.BaseStream.Position = CompressedDataOffset;
+            var compressedData = new byte[CompressedDataLength];
+            reader.Read(compressedData, 0, compressedData.Length);
+            if (!CheckSumIsCorrect(compressedData)) {
+                throw new CfDataCorruptedException("Corrupted data block, the checksum is incorrect.");
+            }
+            return compressedData;
+        }
+        
+        /// <summary>
+        /// Write this data block with some uncompressed data
+        /// </summary>
+        /// <param name="writer"></param>
+        /// <param name="uncompressedData"></param>
+        public void WriteUncompressedData(BinaryWriter writer, byte[] uncompressedData) {
+            CompressedData = _parent.CompressData(uncompressedData);
+            
+            // TODO : implement checksum?
+            CheckSum = ComputeCheckSum(CompressedData);
+            CompressedDataLength = (ushort) CompressedData.Length;
+            UncompressedDataLength = (ushort) uncompressedData.Length;
+            
+            WriteDataHeader(writer);
+
+            CompressedDataOffset = writer.BaseStream.Position;
+            
+            writer.Write(CompressedData);
+
+            CompressedData = null;
         }
 
         /// <summary>
         /// Write this instance of <see cref="CfData"/> to a stream
         /// </summary>
         public void WriteDataHeader(BinaryWriter writer) {
-            writer.BaseStream.Position = HeaderStreamPosition;
+            HeaderStreamPosition = writer.BaseStream.Position;
 
-            // TODO : implement checksum! : stream.WriteAsByteArray(CheckSum);
-            writer.Write((uint) 0);
+            writer.Write(CheckSum);
             writer.Write(CompressedDataLength);
             writer.Write(UncompressedDataLength);
-            if (DataReservedArea.Length > 0) {
+            if (DataReservedArea != null && DataReservedArea.Length > 0) {
                 writer.Write(DataReservedArea, 0, DataReservedArea.Length);
             }
+        }
+
+        /// <summary>
+        /// Verifies if the checksum for the compressed data is correct.
+        /// Checks that the checksum of <paramref name="compressedData"/> is equal to <see cref="CheckSum"/>.
+        /// </summary>
+        /// <param name="compressedData"></param>
+        /// <returns></returns>
+        private bool CheckSumIsCorrect(byte[] compressedData) {
+            return ComputeCheckSum(compressedData) == CheckSum;
+        }
+
+        /// <summary>
+        /// Computes the checksum for some <paramref name="compressedData"/>.
+        /// </summary>
+        /// <param name="compressedData"></param>
+        /// <returns></returns>
+        private uint ComputeCheckSum(byte[] compressedData) {
+            // CFDATA.cbData = cbCompressed;
+            // CFDATA.cbUncomp = cbUncompressed;
+            // csumPartial = CSUMCompute(&CFDATA.ab[0],CFDATA.cbData,0);
+            // CFDATA.csum = CSUMCompute(&CFDATA.cbData,sizeof(CFDATA) –
+            // sizeof(CFDATA.csum),csumPartial);
+            return 0;
         }
 
         /// <summary>
@@ -123,7 +210,7 @@ namespace CabinetManager.core {
             }
 
             // we can't overflow because the max size of a cab archive is uint.MaxValue!
-            CompressedDataOffset = (uint) reader.BaseStream.Position;
+            CompressedDataOffset = reader.BaseStream.Position;
 
             if (reader.BaseStream.Position - HeaderStreamPosition != DataHeaderLength) {
                 throw new CfCabException($"Data info length expected {DataHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}");

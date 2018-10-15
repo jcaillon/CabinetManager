@@ -28,6 +28,7 @@ Status | Info
 - Quantum does not seems to be used very often...
 
 Note : c++ implementation -> https://github.com/coderforlife/ms-compress/tree/master/src
+https://www.samba.org/~tridge/mszip/cabextract
 
 ## Thanks
 
