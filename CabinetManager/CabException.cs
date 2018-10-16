@@ -20,9 +20,13 @@
 
 using System;
 
-namespace Oetools.Utilities.Archive {
+namespace CabinetManager {
+    
+    /// <summary>
+    /// Thrown on cabinet exception.
+    /// </summary>
     public class CabException : Exception {
-        public CabException(string message) : base(message) { }
-        public CabException(string message, Exception innerException) : base(message, innerException) { }
+        internal CabException(string message) : base(message) { }
+        internal CabException(string message, Exception innerException) : base(message, innerException) { }
     }
 }

@@ -17,7 +17,11 @@
 // along with Oetools.Utilities. If not, see <http://www.gnu.org/licenses/>.
 // ========================================================================
 #endregion
-namespace Oetools.Utilities.Archive {
+namespace CabinetManager {
+    
+    /// <summary>
+    /// Compression level for cabinet files.
+    /// </summary>
     public enum CabCompressionLevel {
         /// <summary>Do not compress files, only store.</summary>
         None

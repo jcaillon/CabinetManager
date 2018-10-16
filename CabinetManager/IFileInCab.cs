@@ -17,9 +17,10 @@
 // along with Oetools.Utilities. If not, see <http://www.gnu.org/licenses/>.
 // ========================================================================
 #endregion
+
 using System;
 
-namespace Oetools.Utilities.Archive {
+namespace CabinetManager {
     public interface IFileInCab : IFileCabBase {
                
         /// <summary>

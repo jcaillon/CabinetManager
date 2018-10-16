@@ -1,7 +1,7 @@
 #region header
 // ========================================================================
 // Copyright (c) 2018 - Julien Caillon (julien.caillon@gmail.com)
-// This file (IDataCompressor.cs) is part of CabinetManager.
+// This file (CfSaveProgressionType.cs) is part of CabinetManager.
 // 
 // CabinetManager is a free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -18,9 +18,12 @@
 // ========================================================================
 #endregion
 
-namespace CabinetManager.Compressor {
-    internal interface IDataCompressor {
-        byte[] CompressData(byte[] uncompressedData);
-        ushort GetMaxGrowth();
+namespace CabinetManager.core {
+    internal enum CfSaveProgressionType : byte {
+        /// <summary>Status message for the percentage progression of each file.</summary>
+        FileProgression,
+        
+        /// <summary>Status message after completion of the packing or unpacking an individual file.</summary>
+        FileCompleted
     }
 }

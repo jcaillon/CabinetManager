@@ -20,8 +20,8 @@
 
 using System;
 
-namespace CabinetManager.core {
-    public class CfDataCorruptedException : Exception {
+namespace CabinetManager.core.Exceptions {
+    internal class CfDataCorruptedException : Exception {
         public CfDataCorruptedException(string message) : base(message) { }
     }
 }

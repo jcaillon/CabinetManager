@@ -18,8 +18,8 @@
 // ========================================================================
 #endregion
 
-namespace CabinetManager.Utilities {
-    public interface IDataDecompressor {
+namespace CabinetManager.Compressor {
+    internal interface IDataDecompressor {
         byte[] DecompressData(byte[] compressedData);
         ushort GetMaxGrowth();
     }

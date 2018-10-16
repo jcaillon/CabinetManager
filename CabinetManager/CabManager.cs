@@ -4,11 +4,22 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using CabinetManager.core;
-using Oetools.Utilities.Archive;
+using CabinetManager.Utilities;
 
 namespace CabinetManager {
     
+    /// <summary>
+    /// A cabinet file manager
+    /// </summary>
     public class CabManager : ICabManager {
+
+        /// <summary>
+        /// Get a new instance of cabinet manager.
+        /// </summary>
+        /// <returns></returns>
+        public static ICabManager New() => new CabManager();
+
+        private CabManager() { }
 
         private CfFolderTypeCompress _compressionType;
 
@@ -34,20 +45,28 @@ namespace CabinetManager {
         public event EventHandler<CabProgressionEventArgs> OnProgress;
 
         /// <inheritdoc cref="ICabManager.PackFileSet"/>
-        public void PackFileSet(IEnumerable<IFileToAddInCab> filesToPack) {
-            foreach (var fileToCab in filesToPack) {
-                if (string.IsNullOrEmpty(fileToCab.RelativePathInCab) || string.IsNullOrEmpty(fileToCab.SourcePath)) {
-                    throw new ArgumentNullException("Arguments can't be empty or null");
-                }
-            }
-
+        public void PackFileSet(IEnumerable<IFileToAddInCab> filesToPackIn) {
+            var filesToPack = filesToPackIn.ToList();
+            filesToPack.ForEach(f => f.RelativePathInCab = f.RelativePathInCab.NormalizeRelativePath());
             foreach (var cabGroupedFiles in filesToPack.GroupBy(f => f.CabPath)) {
-                using (var cfCabinet = new CfCabinet(cabGroupedFiles.Key)) {
-                    foreach (var fileToAddInCab in cabGroupedFiles) {
-                        cfCabinet.AddExternalFile(fileToAddInCab.SourcePath, fileToAddInCab.RelativePathInCab);
+                try {                
+                    using (var cfCabinet = new CfCabinet(cabGroupedFiles.Key)) {
+                        foreach (var fileToAddInCab in cabGroupedFiles) {
+                            cfCabinet.AddExternalFile(fileToAddInCab.SourcePath, fileToAddInCab.RelativePathInCab);
+                            OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.FileProcessed, cabGroupedFiles.Key, fileToAddInCab.SourcePath, fileToAddInCab.RelativePathInCab));
+                        }
+                        cfCabinet.Save(_compressionType, args => {
+                            if (args != null && filesToPack.Exists(f => f.RelativePathInCab.Equals(args.RelativePathInCab, StringComparison.OrdinalIgnoreCase))) {
+                                
+                            }
+                        });
                     }
-                    cfCabinet.Save(_compressionType);
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (Exception e) {
+                    throw new CabException($"Failed to pack to {cabGroupedFiles.Key}.", e);
                 }
+                OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.ArchiveCompleted, cabGroupedFiles.Key, null, null));
             }
         }
 
@@ -73,19 +92,23 @@ namespace CabinetManager {
                 try {
                     // create all necessary extraction folders
                     foreach (var extractDirGroupedFiles in cabGroupedFiles.GroupBy(f => Path.GetDirectoryName(f.ExtractionPath))) {
-                        if (!Directory.Exists(extractDirGroupedFiles.Key)) {
+                        if (!Directory.Exists(extractDirGroupedFiles.Key) && !string.IsNullOrWhiteSpace(extractDirGroupedFiles.Key)) {
                             Directory.CreateDirectory(extractDirGroupedFiles.Key);
                         }
                     }
                     using (var cfCabinet = new CfCabinet(cabGroupedFiles.Key)) {
-                        foreach (var fileToExtract in cabGroupedFiles) {
+                        foreach (var file in cfCabinet.GetFiles()) {
                             _cancelToken?.ThrowIfCancellationRequested();
-                            try {
-                                cfCabinet.ExtractToFile(fileToExtract.RelativePathInCab, fileToExtract.ExtractionPath);
-                            } catch (Exception e) {
-                                throw new CabException($"Failed to extract {fileToExtract.ExtractionPath} from {cabGroupedFiles.Key} and relative archive path {fileToExtract.RelativePathInCab}.", e);
+                            var fileToExtract = cabGroupedFiles.FirstOrDefault(f => f.RelativePathInCab.NormalizeRelativePath().Equals(file.RelativePathInCab, StringComparison.OrdinalIgnoreCase));
+                            if (fileToExtract != null) {
+                                try {
+                                    if (cfCabinet.ExtractToFile(fileToExtract.RelativePathInCab.NormalizeRelativePath(), fileToExtract.ExtractionPath)) {
+                                        OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.FileProcessed, cabGroupedFiles.Key, fileToExtract.ExtractionPath, fileToExtract.RelativePathInCab));
+                                    }
+                                } catch (Exception e) {
+                                    throw new CabException($"Failed to extract {fileToExtract.ExtractionPath} from {cabGroupedFiles.Key} and relative archive path {fileToExtract.RelativePathInCab}.", e);
+                                }
                             }
-                            OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.FinishFile, cabGroupedFiles.Key, fileToExtract.ExtractionPath, fileToExtract.RelativePathInCab));
                         }
                     }
                 } catch (OperationCanceledException) {
@@ -93,14 +116,36 @@ namespace CabinetManager {
                 } catch (Exception e) {
                     throw new CabException($"Failed to unpack files from {cabGroupedFiles.Key}.", e);
                 }
-                OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.FinishArchive, cabGroupedFiles.Key, null, null));
+                OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.ArchiveCompleted, cabGroupedFiles.Key, null, null));
             }
         }
 
         /// <inheritdoc cref="ICabManager.DeleteFileSet"/>
-        public void DeleteFileSet(IEnumerable<IFileInCabToDelete> filesToDelete) {
-            OnProgress?.Invoke(this, null);
-            throw new NotImplementedException();
+        public void DeleteFileSet(IEnumerable<IFileInCabToDelete> filesToDeleteIn) {
+            var filesToDelete = filesToDeleteIn.ToList();
+            filesToDelete.ForEach(f => f.RelativePathInCab = f.RelativePathInCab.NormalizeRelativePath());
+            foreach (var cabGroupedFiles in filesToDelete.GroupBy(f => f.CabPath)) {
+                if (!File.Exists(cabGroupedFiles.Key)) {
+                    throw new CabException($"The cabinet file does not exist : {cabGroupedFiles.Key}.");
+                }
+                try {
+                    using (var cfCabinet = new CfCabinet(cabGroupedFiles.Key)) {
+                        foreach (var file in cabGroupedFiles) {
+                            _cancelToken?.ThrowIfCancellationRequested();
+                            
+                            if (cfCabinet.DeleteFile(file.RelativePathInCab)) {
+                                OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.FileProcessed, cabGroupedFiles.Key, null, file.RelativePathInCab));
+                            }
+                        }
+                        cfCabinet.Save(_compressionType, null);
+                    }
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (Exception e) {
+                    throw new CabException($"Failed to delete files from {cabGroupedFiles.Key}.", e);
+                }
+                OnProgress?.Invoke(this, new CabProgressionEventArgs(CabProgressionType.ArchiveCompleted, cabGroupedFiles.Key, null, null));
+            }
         }
         
         /// <summary>

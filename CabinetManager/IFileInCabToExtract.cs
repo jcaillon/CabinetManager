@@ -17,7 +17,7 @@
 // along with Oetools.Utilities. If not, see <http://www.gnu.org/licenses/>.
 // ========================================================================
 #endregion
-namespace Oetools.Utilities.Archive {
+namespace CabinetManager {
     public interface IFileInCabToExtract : IFileCabBase {
         
         /// <summary>

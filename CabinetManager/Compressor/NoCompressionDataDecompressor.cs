@@ -18,8 +18,8 @@
 // ========================================================================
 #endregion
 
-namespace CabinetManager.Utilities {
-    public class NoCompressionDataDecompressor : IDataDecompressor {
+namespace CabinetManager.Compressor {
+    internal class NoCompressionDataDecompressor : IDataDecompressor {
         public byte[] DecompressData(byte[] compressedData) {
             return compressedData;
         }

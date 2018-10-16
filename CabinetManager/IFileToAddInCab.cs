@@ -17,11 +17,11 @@
 // along with Oetools.Utilities. If not, see <http://www.gnu.org/licenses/>.
 // ========================================================================
 #endregion
-namespace Oetools.Utilities.Archive {
+namespace CabinetManager {
     public interface IFileToAddInCab : IFileCabBase {
         
         /// <summary>
-        /// The path of the file to archive
+        /// The path of the file to archive.
         /// </summary>
         string SourcePath { get; set; }
     }

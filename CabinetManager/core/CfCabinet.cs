@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using CabinetManager.core.Exceptions;
 using CabinetManager.Utilities;
 
 namespace CabinetManager.core {
@@ -26,10 +27,7 @@ namespace CabinetManager.core {
         
         public CfCabinet(string cabPath) {
             CabPath = cabPath;
-            if (Exists) {
-                _reader = new BinaryReader(File.OpenRead(cabPath));
-                ReadCabinetInfo(_reader);
-            }
+            OpenCab();
         }
 
         public void Dispose() {
@@ -194,9 +192,11 @@ namespace CabinetManager.core {
         /// <summary>
         /// Temporary cab path to write to
         /// </summary>
-        private string CabPathToWrite => _cabPathToWrite ?? (_cabPathToWrite = $"{CabPath}~{Path.GetRandomFileName()}");
+        private string CabPathToWrite => _cabPathToWrite ?? (_cabPathToWrite = Path.Combine(Path.GetDirectoryName(CabPath) ?? "", $"~{Path.GetRandomFileName()}"));
 
         private string _cabPathToWrite;
+
+        private bool _dataHeadersRead;
         
         /// <summary>
         /// The number of byte needed for the header info
@@ -238,6 +238,135 @@ namespace CabinetManager.core {
         public IEnumerable<CfFile> GetFiles() => Folders.SelectMany(f => f.Files).Concat(NextCabinet?.GetFiles() ?? Enumerable.Empty<CfFile>());
         
         /// <summary>
+        /// Add a new external file to this cabinet file.
+        /// </summary>
+        /// <param name="sourcePath"></param>
+        /// <param name="relativePathInCab"></param>
+        /// <exception cref="CfCabException"></exception>
+        public void AddExternalFile(string sourcePath, string relativePathInCab) {
+            if (!_dataHeadersRead) {
+                ReadDataHeaders(_reader);
+            }
+            
+            if (FilesCount + 1 > CabinetMaximumFileCount) {
+                throw new CfCabException($"The cabinet would exceed the maximum number of files in a single cabinet: {CabinetMaximumFileCount}.");
+            }
+            
+            // remove existing files with the same name
+            DeleteFile(relativePathInCab);
+
+            var fileInfo = new FileInfo(sourcePath);
+            var fileInfoLength = fileInfo.Length;
+            if (fileInfo.Length > CfFile.FileMaximumUncompressedSize) {
+                throw new CfCabException($"The file exceeds the maximum size of {CfFile.FileMaximumUncompressedSize} with a length of {fileInfoLength} bytes.");
+            }
+
+            ushort idx = 0;
+            while (true) {
+                if (idx >= Folders.Count) {
+                    Folders.Add(new CfFolder(this));
+                    Folders[idx].FolderIndex = idx;
+                }
+                if (Folders[idx].FolderUncompressedSize + fileInfoLength <= CfFolder.FolderMaximumUncompressedSize &&
+                    Folders[idx].Files.Count + 1 <= CfFolder.FolderMaximumFileCount) {
+                    break;
+                }
+                idx++;
+            }
+
+            var addedFile = new CfFile(Folders[idx]) {
+                RelativePathInCab = relativePathInCab,
+                AbsolutePath = sourcePath,
+                UncompressedFileSize = (uint) fileInfoLength,
+                FileDateTime = fileInfo.LastWriteTime
+            };
+            
+            addedFile.FileDateTime = File.GetLastWriteTime(sourcePath);
+            var sourceFileAttributes = File.GetAttributes(sourcePath);
+            if (sourceFileAttributes.HasFlag(FileAttributes.ReadOnly)) {
+                addedFile.FileAttributes |= CfFileAttribs.Rdonly;
+            }
+            if (sourceFileAttributes.HasFlag(FileAttributes.Hidden)) {
+                addedFile.FileAttributes |= CfFileAttribs.Hiddden;
+            }
+            Folders[idx].Files.Add(addedFile);
+        }
+
+        /// <summary>
+        /// Extracts a file to an external path.
+        /// </summary>
+        /// <param name="relativePathInCab"></param>
+        /// <param name="extractionPath"></param>
+        /// <returns>true if the file was actually extracted, false if it does not exist</returns>
+        public bool ExtractToFile(string relativePathInCab, string extractionPath) {
+            if (!_dataHeadersRead) {
+                ReadDataHeaders(_reader);
+            }
+            
+            var fileInCab = Folders.SelectMany(folder => folder.Files).FirstOrDefault(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
+            fileInCab?.ExtractToFile(_reader, extractionPath);
+            return fileInCab != null;
+        }
+        
+        public bool DeleteFile(string relativePathInCab) {
+            if (!_dataHeadersRead) {
+                ReadDataHeaders(_reader);
+            }
+            
+            int nbFileDeleted = 0;
+            // remove existing files with the same name
+            foreach (var folder in Folders) {
+                if ((nbFileDeleted += folder.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase))) > 0) {
+                    // case of a file split into several cabinets
+                    nbFileDeleted += NextCabinet?.Folders.FirstOrDefault()?.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase)) ?? 0;
+                    break;
+                }
+            }
+            return nbFileDeleted > 0;
+        }
+        
+        /// <summary>
+        /// Save this instance of <see cref="CfCabinet"/> to <see cref="CabPath"/>.
+        /// </summary>
+        public void Save(CfFolderTypeCompress compressionType, Action<CfSaveProgressionEventArgs> progress) {
+            if (!_dataHeadersRead) {
+                ReadDataHeaders(_reader);
+            }
+            
+            var cabDirectory = Path.GetDirectoryName(CabPathToWrite);
+            if (!string.IsNullOrWhiteSpace(cabDirectory) && !Directory.Exists(cabDirectory)) {
+                Directory.CreateDirectory(cabDirectory);
+            }
+            try {
+                using (var writer = new BinaryWriter(File.OpenWrite(CabPathToWrite))) {
+                    writer.BaseStream.Position = 0;
+                    WriteHeaderToStream(writer);
+                    WriteFileAndFolderHeaders(writer, compressionType);
+                    WriteData(writer, progress);
+                    UpdateCabinetSize(writer);
+                }
+                _reader?.Dispose();
+                File.Delete(CabPath);
+                File.Move(CabPathToWrite, CabPath);
+            } finally {
+                // get rid of the temp file
+                if (File.Exists(CabPathToWrite)) {
+                    File.Delete(CabPathToWrite);
+                }
+            }
+        }
+        
+        private void OpenCab() {
+            Folders.Clear();
+            NextCabinet = null;
+            _dataHeadersRead = false;
+            if (Exists) {
+                _reader = new BinaryReader(File.OpenRead(CabPath));
+                ReadCabinetInfo(_reader);
+            }
+        }
+        
+        /// <summary>
         /// Read data from <see cref="CabPath"/> to fill this <see cref="CfCabinet"/>
         /// </summary>
         /// <param name="reader"></param>
@@ -264,90 +393,6 @@ namespace CabinetManager.core {
             }
         }
 
-        /// <summary>
-        /// Add a new external file to this cabinet file.
-        /// </summary>
-        /// <param name="sourcePath"></param>
-        /// <param name="relativePathInCab"></param>
-        /// <exception cref="CfCabException"></exception>
-        public void AddExternalFile(string sourcePath, string relativePathInCab) {
-
-            if (FilesCount + 1 > CabinetMaximumFileCount) {
-                throw new CfCabException($"The cabinet would exceed the maximum number of files in a single cabinet: {CabinetMaximumFileCount}.");
-            }
-            
-            // remove existing files with the same name
-            foreach (var folder in Folders) {
-                if (folder.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase)) > 0) {
-                    // case of a file split into several cabinets
-                    NextCabinet?.Folders.FirstOrDefault()?.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
-                    break;
-                }
-            }
-
-            var fileInfo = new FileInfo(sourcePath);
-            var fileInfoLength = fileInfo.Length;
-            if (fileInfo.Length > CfFile.FileMaximumUncompressedSize) {
-                throw new CfCabException($"The file exceeds the maximum size of {CfFile.FileMaximumUncompressedSize} with a length of {fileInfoLength} bytes.");
-            }
-
-            ushort idx = 0;
-            while (true) {
-                if (idx >= Folders.Count) {
-                    Folders.Add(new CfFolder(this));
-                    Folders[idx].FolderIndex = idx;
-                }
-                if (Folders[idx].FolderUncompressedSize + fileInfoLength <= CfFolder.FolderMaximumUncompressedSize &&
-                    Folders[idx].Files.Count + 1 <= CfFolder.FolderMaximumFileCount) {
-                    break;
-                }
-                idx++;
-            }
-
-            var addedFile = new CfFile(Folders[idx]) {
-                RelativePathInCab = relativePathInCab,
-                AbsolutePath = sourcePath,
-                UncompressedFileSize = (uint) fileInfoLength,
-                // TODO : set files attributes
-                FileDateTime = fileInfo.LastWriteTime
-            };
-
-            Folders[idx].Files.Add(addedFile);
-        }
-
-        /// <summary>
-        /// Extracts a file to an external path.
-        /// </summary>
-        /// <param name="relativePathInCab"></param>
-        /// <param name="extractionPath"></param>
-        public void ExtractToFile(string relativePathInCab, string extractionPath) {
-            var fileInCab = Folders.SelectMany(folder => folder.Files).FirstOrDefault(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
-            fileInCab?.ExtractToFile(_reader, extractionPath);
-        }
-        
-        /// <summary>
-        /// Save this instance of <see cref="CfCabinet"/> to <see cref="CabPath"/>.
-        /// </summary>
-        public void Save(CfFolderTypeCompress compressionType) {
-            var cabDirectory = Path.GetDirectoryName(CabPathToWrite);
-            if (!Directory.Exists(cabDirectory)) {
-                Directory.CreateDirectory(cabDirectory);
-            }
-            try {
-                using (var writer = new BinaryWriter(File.OpenWrite(CabPathToWrite))) {
-                    writer.BaseStream.Position = 0;
-                    WriteHeaderToStream(writer);
-                    WriteFileAndFolderHeaders(writer, compressionType);
-                    WriteData(writer);
-                    UpdateCabinetSize(writer);
-                }
-            } finally {
-                // get rid of the temp file
-                if (File.Exists(CabPathToWrite)) {
-                    // TODO : File.Delete(CabPathToWrite);
-                }
-            }
-        }
         
         private void WriteHeaderToStream(BinaryWriter writer) {
             writer.Write(_signature, 0, _signature.Length);
@@ -413,7 +458,7 @@ namespace CabinetManager.core {
                 folder.CompressionType = compressionType;
                 folder.WriteFolderHeader(writer);
             }
-
+            
             uint uncompressedFileOffset = 0;
             foreach (var folder in Folders) { // .OrderBy(f => f.FolderIndex)
                 
@@ -426,17 +471,17 @@ namespace CabinetManager.core {
             }
         }
 
-        private void WriteData(BinaryWriter writer) {
+        private void WriteData(BinaryWriter writer, Action<CfSaveProgressionEventArgs> progress) {
             foreach (var folder in Folders) { // .OrderBy(f => f.FolderIndex)
                 folder.FirstDataBlockOffset = (uint) writer.BaseStream.Position;
-                folder.SaveFolder(_reader, writer);
+                folder.SaveFolder(_reader, writer, progress);
                 folder.UpdateDataBlockInfo(writer);
             }
         }
         
         private void UpdateCabinetSize(BinaryWriter writer) {
-            if (writer.BaseStream.Length > CabFileNameMaximumLength) {
-                throw new CfCabException($"The cabinet size exceeds the maximum of ({CabFileNameMaximumLength}) bytes with {writer.BaseStream.Length}.");
+            if (writer.BaseStream.Length > CabinetMaximumSize) {
+                throw new CfCabException($"The cabinet size exceeds the maximum of ({CabinetMaximumSize}) bytes with {writer.BaseStream.Length}.");
             }
             CabinetSize = (uint) writer.BaseStream.Length;
 
@@ -541,6 +586,13 @@ namespace CabinetManager.core {
             FirstFileEntryOffset = 0;
         }
 
+        private void ReadDataHeaders(BinaryReader reader) {
+            foreach (var folder in Folders) {
+                folder.ReadDataHeaders(reader);
+            }
+            _dataHeadersRead = true;
+        }
+
         /// <summary>
         /// Returns the compressed data of the first data block of the cabinet.
         /// </summary>
@@ -560,7 +612,7 @@ namespace CabinetManager.core {
         /// <returns></returns>
         public string GetStringFullRepresentation() {
             foreach (var folder in Folders) {
-                folder.ReadDataHeader(_reader);
+                folder.ReadDataHeaders(_reader);
             }
             return ToString();
         }

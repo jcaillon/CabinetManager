@@ -23,9 +23,8 @@ using System.IO;
 using System.Linq;
 using CabinetManager;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
-using Oetools.Utilities.Archive;
 
-namespace Oetools.Utilities.Test.Archive {
+namespace CabinetManagerTest.Tests {
     
     public class ArchiveTest {
 
@@ -115,42 +114,50 @@ namespace Oetools.Utilities.Test.Archive {
         }
 
         private void ArchiverOnOnProgress(object sender, CabProgressionEventArgs e) {
-            if (e.ProgressionType == CabProgressionType.FinishFile) {
+            if (e.ProgressionType == CabProgressionType.FileProcessed) {
                 _nbFileFinished++;
-            } else if (e.ProgressionType == CabProgressionType.FinishArchive) {
+            } else if (e.ProgressionType == CabProgressionType.ArchiveCompleted) {
                 _nbArchiveFinished++;
             }
         }
         
-        protected List<FileInCab> GetPackageTestFilesList(string testFolder, string CabPath) {
+        protected List<FileInCab> GetPackageTestFilesList(string testFolder, string cabPath) {
             var list = new List<FileInCab> {
                 new FileInCab {
                     SourcePath = Path.Combine(testFolder, "file 0.txt"),
-                    CabPath = CabPath,
+                    CabPath = cabPath,
                     RelativePathInCab = "file 0.txt",
-                    ExtractionPath = Path.Combine(testFolder, "extract", Path.GetFileName(CabPath) ?? "", "file 0.txt")
+                    ExtractionPath = Path.Combine(testFolder, "extract", Path.GetFileName(cabPath) ?? "", "file 0.txt")
                 },
                 new FileInCab {
                     SourcePath = Path.Combine(testFolder, "file1.txt"),
-                    CabPath = CabPath,
+                    CabPath = cabPath,
                     RelativePathInCab = "file1.txt",
-                    ExtractionPath = Path.Combine(testFolder, "extract", Path.GetFileName(CabPath) ?? "", "file1.txt")
+                    ExtractionPath = Path.Combine(testFolder, "extract", Path.GetFileName(cabPath) ?? "", "file1.txt")
                 },
                 new FileInCab {
                     SourcePath = Path.Combine(testFolder, "file2.txt"),
-                    CabPath = CabPath,
+                    CabPath = cabPath,
                     RelativePathInCab = Path.Combine("subfolder1", "file2.txt"),
-                    ExtractionPath = Path.Combine(testFolder, "extract", Path.GetFileName(CabPath) ?? "", "subfolder1", "file2.txt")
+                    ExtractionPath = Path.Combine(testFolder, "extract", Path.GetFileName(cabPath) ?? "", "subfolder1", "file2.txt")
                 },
                 new FileInCab {
                     SourcePath = Path.Combine(testFolder, "file3.txt"),
-                    CabPath = CabPath,
+                    CabPath = cabPath,
                     RelativePathInCab = Path.Combine("subfolder1", "bla bla", "file3.txt"),
-                    ExtractionPath = Path.Combine(testFolder, "extract", Path.GetFileName(CabPath) ?? "", "subfolder1", "bla bla", "file3.txt")
+                    ExtractionPath = Path.Combine(testFolder, "extract", Path.GetFileName(cabPath) ?? "", "subfolder1", "bla bla", "file3.txt")
                 }
             };
             foreach (var file in list) {
                 File.WriteAllText(file.SourcePath, $"\"{Path.GetFileName(file.SourcePath)}\"");
+                if (File.Exists(file.ExtractionPath)) {
+                    File.Delete(file.ExtractionPath);
+                }
+            }
+            foreach (var cabGrouped in list.GroupBy(f => f.CabPath)) {
+                if (File.Exists(cabGrouped.Key)) {
+                    File.Delete(cabGrouped.Key);
+                }
             }
             return list;
         }

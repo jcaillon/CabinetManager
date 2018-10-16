@@ -1,7 +1,10 @@
 ﻿using System;
+using System.Runtime.CompilerServices;
+
+[assembly: InternalsVisibleTo("CabinetManagerTest")]
 
 namespace CabinetManager.Utilities {
-    public static class DosDateTime {
+    internal static class DosDateTime {
         public static DateTime DosDateTimeToDateTime(ushort wFatDate, ushort wFatTime) {
             // for the date part :
             // 16  =  7 +           4 +     5

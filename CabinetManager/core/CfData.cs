@@ -1,7 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text;
-using CabinetManager.Utilities;
+using CabinetManager.core.Exceptions;
 
 namespace CabinetManager.core {
     
@@ -125,9 +125,6 @@ namespace CabinetManager.core {
             reader.BaseStream.Position = CompressedDataOffset;
             var compressedData = new byte[CompressedDataLength];
             reader.Read(compressedData, 0, compressedData.Length);
-            if (!CheckSumIsCorrect(compressedData)) {
-                throw new CfDataCorruptedException("Corrupted data block, the checksum is incorrect.");
-            }
             return compressedData;
         }
         
@@ -168,16 +165,6 @@ namespace CabinetManager.core {
         }
 
         /// <summary>
-        /// Verifies if the checksum for the compressed data is correct.
-        /// Checks that the checksum of <paramref name="compressedData"/> is equal to <see cref="CheckSum"/>.
-        /// </summary>
-        /// <param name="compressedData"></param>
-        /// <returns></returns>
-        private bool CheckSumIsCorrect(byte[] compressedData) {
-            return ComputeCheckSum(compressedData) == CheckSum;
-        }
-
-        /// <summary>
         /// Computes the checksum for some <paramref name="compressedData"/>.
         /// </summary>
         /// <param name="compressedData"></param>
@@ -188,7 +175,7 @@ namespace CabinetManager.core {
             // csumPartial = CSUMCompute(&CFDATA.ab[0],CFDATA.cbData,0);
             // CFDATA.csum = CSUMCompute(&CFDATA.cbData,sizeof(CFDATA) –
             // sizeof(CFDATA.csum),csumPartial);
-            return 0;
+            return CheckSum;
         }
 
         /// <summary>

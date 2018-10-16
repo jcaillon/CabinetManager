@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using CabinetManager.core.Exceptions;
 using CabinetManager.Utilities;
 
 namespace CabinetManager.core {
@@ -8,7 +9,7 @@ namespace CabinetManager.core {
     /// <summary>
     /// <para>
     /// Each <see cref="CfFile"/> entry contains information about one of the files stored (or at least partially stored) in this cabinet.
-    /// The first <see cref="CfFile"/> entry in each cabinet is found at absolute offset <see cref="CfCabinet.GetFirstFileEntryOffset()"/>.
+    /// The first <see cref="CfFile"/> entry in each cabinet is found at absolute offset <see cref="CfCabinet.FirstFileEntryOffset"/>.
     /// In a standard cabinet file the first <see cref="CfFile"/> entry immediately follows the last <see cref="CfFolder"/> entry.
     /// Subsequent <see cref="CfFile"/> records for this cabinet are contiguous.
     /// 
@@ -60,7 +61,7 @@ namespace CabinetManager.core {
         /// Subsequent files in the folder will have offsets that are typically the running sum of the <see cref="UncompressedFileSize"/> values.
         /// </summary>
         public uint UncompressedFileOffset { get; set; }
-
+        
         /// <summary>
         /// Index of the folder containing this file's data. A value of zero indicates this is the first folder in this cabinet file.
         /// The special <see cref="FolderIndex"/> values <see cref="IfoldContinuedFromPrev"/> and <see cref="IfoldContinuedPrevAndNext"/> indicate that the folder index is actually zero,
@@ -74,7 +75,8 @@ namespace CabinetManager.core {
         }
 
         private ushort _folderIndex;
-        
+        private string _relativePathInCab;
+
         /// <summary>
         /// File date time
         /// </summary>
@@ -88,7 +90,10 @@ namespace CabinetManager.core {
         /// <summary>
         /// Path inside the cab, including path separator characters and the file name
         /// </summary>
-        public string RelativePathInCab { get; set; }
+        public string RelativePathInCab {
+            get => _relativePathInCab;
+            set => _relativePathInCab = value?.NormalizeRelativePath();
+        }
 
         /// <summary>
         /// Stream position at which we can write this <see cref="CfFile"/> header
@@ -100,12 +105,19 @@ namespace CabinetManager.core {
         /// </summary>
         /// <param name="reader"></param>
         /// <param name="toPath"></param>
-        public void ExtractToFile(BinaryReader reader, string toPath) {
+        internal void ExtractToFile(BinaryReader reader, string toPath) {
             using (Stream targetStream = File.OpenWrite(toPath)) {
-                Parent.ExtractData(reader, targetStream, UncompressedFileOffset, UncompressedFileSize);
+                Parent.ExtractData(reader, targetStream, RelativePathInCab);
             }
 
-            // TODO : set extracted file attributes
+            File.SetCreationTime(toPath, FileDateTime);
+            File.SetLastWriteTime(toPath, FileDateTime);
+            if (FileAttributes.HasFlag(CfFileAttribs.Rdonly)) {
+                File.SetAttributes(toPath, System.IO.FileAttributes.ReadOnly);
+            }
+            if (FileAttributes.HasFlag(CfFileAttribs.Hiddden)) {
+                File.SetAttributes(toPath, System.IO.FileAttributes.Hidden);
+            }
         }
 
         /// <summary>

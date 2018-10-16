@@ -1,9 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
-using CabinetManager.Utilities;
+using CabinetManager.core.Exceptions;
+using CabinetManager.Compressor;
 
 namespace CabinetManager.core {
     
@@ -46,9 +46,11 @@ namespace CabinetManager.core {
 
         private readonly CfCabinet _parent;
 
+        private CfDataBlockReader _blockReader;
+
         public CfFolder(CfCabinet parent) {
             _parent = parent;
-        }
+                 }
 
         /// <summary>
         /// This folder index, starting at 0
@@ -111,7 +113,7 @@ namespace CabinetManager.core {
         /// <summary>
         /// list of data for this folder
         /// </summary>
-        private List<CfData> Data { get; } = new List<CfData>();
+        internal List<CfData> Data { get; } = new List<CfData>();
 
         public long FolderUncompressedSize {
             get {
@@ -134,149 +136,90 @@ namespace CabinetManager.core {
         /// </summary>
         /// <param name="reader"></param>
         /// <param name="targetStream"></param>
-        /// <param name="uncompressedFileOffset"></param>
-        /// <param name="uncompressedFileSize"></param>
-        public void ExtractData(BinaryReader reader, Stream targetStream, uint uncompressedFileOffset, uint uncompressedFileSize) {
-            if (Data.Count == 0) {
-                // read data headers if needed
-                ReadDataHeader(reader);
-            }
+        /// <param name="fileRelativePathInCab"></param>
+        public void ExtractData(BinaryReader reader, Stream targetStream, string fileRelativePathInCab) {
+            _blockReader.InitializeToReadFile(fileRelativePathInCab);
 
-            var uncompressedFileOffsetToRead = uncompressedFileOffset;
-            var uncompressedFileLengthLeftToRead = uncompressedFileSize;
-            var iDataBlock = 0;
-            do {
-                var dataBlock = Data[iDataBlock];
-
-                // find the data block in which the data we want to read starts
-                if (dataBlock.UncompressedDataOffset <= uncompressedFileOffsetToRead &&
-                    (uncompressedFileOffsetToRead <= dataBlock.UncompressedDataOffset + dataBlock.UncompressedDataLength || dataBlock.UncompressedDataLength == 0)) {
-                    // the first byte of the uncompressed data will be found in this dataBlock
-
-                    byte[] uncompressedData = dataBlock.ReadUncompressedData(reader);
-
-                    var fileDataOffsetInThisBlockData = (int) uncompressedFileOffsetToRead - (int) dataBlock.UncompressedDataOffset;
-                    var fileDataLengthReadInThisBlockData = Math.Min(uncompressedData.Length - fileDataOffsetInThisBlockData, (int) uncompressedFileLengthLeftToRead);
-                    targetStream.Write(uncompressedData, fileDataOffsetInThisBlockData, fileDataLengthReadInThisBlockData);
-
-                    uncompressedFileOffsetToRead += (uint) fileDataLengthReadInThisBlockData;
-                    uncompressedFileLengthLeftToRead -= (uint) fileDataLengthReadInThisBlockData;
-                }
-            } while (iDataBlock++ < Data.Count && uncompressedFileLengthLeftToRead > 0);
-
-            if (uncompressedFileLengthLeftToRead > 0) {
-                throw new CfCabException($"Failed to read the entire data starting at {uncompressedFileOffset} with length {uncompressedFileSize}.");
+            var dataBlockBuffer = new byte[CfData.MaxUncompressedDataLength];
+            int nbBytesRead;
+            while ((nbBytesRead = _blockReader.ReadUncompressedData(reader, dataBlockBuffer, 0, dataBlockBuffer.Length)) > 0) {
+                targetStream.Write(dataBlockBuffer, 0, nbBytesRead);
             }
         }
         
-        public void SaveFolder(BinaryReader reader, BinaryWriter writer) {
+        public void SaveFolder(BinaryReader reader, BinaryWriter writer, Action<CfSaveProgressionEventArgs> progress) {
             
             var dataBlockBuffer = new byte[CfData.MaxUncompressedDataLength];
             var dataBlockBufferPosition = 0;
-
             long uncompressedDataOffset = 0;
+            Data.Clear();
+            
+            void PushToNewDataBlock() {           
+                if (Data.Count + 1 > FolderMaximumDataBlockCount) {
+                    throw new CfCabException($"The total number of data block for this folder {FolderIndex} exceeds the limit of {FolderMaximumDataBlockCount}.");
+                }
+            
+                var cfData = new CfData(this) {
+                    UncompressedDataOffset = uncompressedDataOffset
+                };
+                Data.Add(cfData);
+
+                byte[] uncompressedData;
+                if (dataBlockBuffer.Length - dataBlockBufferPosition <= 0) {
+                    uncompressedData = dataBlockBuffer;
+                } else {
+                    uncompressedData = new byte[dataBlockBufferPosition];
+                    Array.Copy(dataBlockBuffer, 0, uncompressedData, 0, dataBlockBufferPosition);
+                }
+            
+                cfData.WriteUncompressedData(writer, uncompressedData);
+                        
+                // reset data block buffer
+                dataBlockBuffer = new byte[CfData.MaxUncompressedDataLength];
+                dataBlockBufferPosition = 0;
+            }
+
             foreach (var file in Files) { // .OrderBy(f => f.UncompressedFileSize)
                 var bytesLeftInBuffer = dataBlockBuffer.Length - dataBlockBufferPosition;
                 
                 if (!string.IsNullOrEmpty(file.AbsolutePath)) {
-                    // read data from file
+                    if (!File.Exists(file.AbsolutePath)) {
+                        throw new CfCabFileMissingException($"Missing source file : {file.AbsolutePath}.");
+                    }
                     using (Stream sourceStream = File.OpenRead(file.AbsolutePath)) {
-                        byte[] fileBuffer = new byte[bytesLeftInBuffer];
                         int nbBytesRead;
-                        while ((nbBytesRead = sourceStream.Read(fileBuffer, 0, fileBuffer.Length)) > 0) {
-                            Array.Copy(fileBuffer, 0, dataBlockBuffer, dataBlockBufferPosition, nbBytesRead);
+                        while ((nbBytesRead = sourceStream.Read(dataBlockBuffer, dataBlockBufferPosition, bytesLeftInBuffer)) > 0) {
                             dataBlockBufferPosition += nbBytesRead;
                             if (dataBlockBuffer.Length - dataBlockBufferPosition <= 0) { // < 0 should never happen
                                 // buffer full, flush it
-                                PushToNewDataBlock(writer, ref dataBlockBuffer, ref dataBlockBufferPosition, uncompressedDataOffset);
+                                PushToNewDataBlock();
                             }
+                            bytesLeftInBuffer = dataBlockBuffer.Length - dataBlockBufferPosition;
+                            // TODO : file progress
                         }
                     }
-                } else {
-                    // read data from the existing cabinet
-                    if (Data.Count == 0) {
-                        // read data headers if needed
-                        ReadDataHeader(reader);
-                    }
-        
-                    var uncompressedFileOffsetToRead = file.UncompressedFileOffset;
-                    var uncompressedFileLengthLeftToRead = file.UncompressedFileSize;
-                    var iDataBlock = 0;
-                    do {
-                        var dataBlock = Data[iDataBlock];
-        
-                        // find the data block in which the data we want to read starts
-                        if (dataBlock.UncompressedDataOffset <= uncompressedFileOffsetToRead &&
-                            (uncompressedFileOffsetToRead <= dataBlock.UncompressedDataOffset + dataBlock.UncompressedDataLength || dataBlock.UncompressedDataLength == 0)) {
-                            // the first byte of the uncompressed data will be found in this dataBlock
-        
-                            byte[] uncompressedData = dataBlock.ReadUncompressedData(reader);
-        
-                            var fileDataOffsetInThisBlockData = (int) uncompressedFileOffsetToRead - (int) dataBlock.UncompressedDataOffset;
-                            var fileDataLengthReadInThisBlockData = Math.Min(uncompressedData.Length - fileDataOffsetInThisBlockData, (int) uncompressedFileLengthLeftToRead);
-                            
-                            var dataChunkOffset = 0;
-                            var dataChunkLengthLeft = fileDataLengthReadInThisBlockData - fileDataOffsetInThisBlockData;
-
-                            do {
-                                var dataChunkLengthToRead = Math.Min(dataChunkLengthLeft, bytesLeftInBuffer);
-                                //var dataChunk = new byte[dataChunkLengthToRead];
-                                //Array.Copy(uncompressedData, fileDataOffsetInThisBlockData + dataChunkOffset, dataChunk, 0, dataChunkLengthToRead);
-                                
-                                Array.Copy(uncompressedData, fileDataOffsetInThisBlockData + dataChunkOffset, dataBlockBuffer, dataBlockBufferPosition, dataChunkLengthToRead);
-                                dataBlockBufferPosition += dataChunkLengthToRead;
-                                
-                                if (dataBlockBuffer.Length - dataBlockBufferPosition <= 0) { // < 0 should never happen
-                                    // buffer full, flush it
-                                    PushToNewDataBlock(writer, ref dataBlockBuffer, ref dataBlockBufferPosition, uncompressedDataOffset);
-                                }
-
-                                dataChunkOffset += dataChunkLengthToRead;
-                                dataChunkLengthLeft -= dataChunkLengthToRead;
-                            } while (dataChunkLengthLeft > 0);
-                            
-                            uncompressedFileOffsetToRead += (uint) fileDataLengthReadInThisBlockData;
-                            uncompressedFileLengthLeftToRead -= (uint) fileDataLengthReadInThisBlockData;
+                } else {                   
+                    _blockReader.InitializeToReadFile(file.RelativePathInCab);
+                    int nbBytesRead;
+                    while ((nbBytesRead = _blockReader.ReadUncompressedData(reader, dataBlockBuffer, dataBlockBufferPosition, bytesLeftInBuffer)) > 0) {
+                        dataBlockBufferPosition += nbBytesRead;
+                        if (dataBlockBuffer.Length - dataBlockBufferPosition <= 0) { // < 0 should never happen
+                            // buffer full, flush it
+                            PushToNewDataBlock();
                         }
-                    } while (iDataBlock++ < Data.Count && uncompressedFileLengthLeftToRead > 0);
-        
-                    if (uncompressedFileLengthLeftToRead > 0) {
-                        throw new CfCabException($"Failed to read the entire data starting at {file.UncompressedFileOffset} with length {file.UncompressedFileSize}.");
+                        bytesLeftInBuffer = dataBlockBuffer.Length - dataBlockBufferPosition;
                     }
                 }
 
                 uncompressedDataOffset += file.UncompressedFileSize;
+                
+                progress?.Invoke(CfSaveProgressionEventArgs.NewFinishedFile(file.RelativePathInCab));
             }
 
             if (dataBlockBufferPosition > 0) {
                 // flush data block
-                PushToNewDataBlock(writer, ref dataBlockBuffer, ref dataBlockBufferPosition, uncompressedDataOffset);
+                PushToNewDataBlock();
             }
-        }
-
-        public void PushToNewDataBlock(BinaryWriter writer, ref byte[] dataBlockBuffer, ref int dataBlockBufferPosition, long uncompressedDataOffset) {           
-            if (Data.Count + 1 > FolderMaximumDataBlockCount) {
-                throw new CfCabException($"The total number of data block for this folder {FolderIndex} exceeds the limit of {FolderMaximumDataBlockCount}.");
-            }
-            
-            var cfData = new CfData(this) {
-                UncompressedDataOffset = uncompressedDataOffset
-            };
-
-            byte[] uncompressedData;
-            if (dataBlockBuffer.Length - dataBlockBufferPosition <= 0) {
-                uncompressedData = dataBlockBuffer;
-            } else {
-                uncompressedData = new byte[dataBlockBufferPosition];
-                Array.Copy(dataBlockBuffer, 0, uncompressedData, 0, dataBlockBufferPosition);
-            }
-            
-            cfData.WriteUncompressedData(writer, uncompressedData);
-            Data.Add(cfData);
-                        
-            // reset data block buffer
-            dataBlockBuffer = new byte[CfData.MaxUncompressedDataLength];
-            dataBlockBufferPosition = 0;
         }
 
         /// <summary>
@@ -313,7 +256,7 @@ namespace CabinetManager.core {
             }
 
             if (reader.BaseStream.Position - HeaderStreamPosition != FolderHeaderLength) {
-                throw new CfCabException($"Folder info length expected {FolderHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}");
+                throw new CfCabException($"Folder info length expected {FolderHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}.");
             }
         }
 
@@ -322,15 +265,18 @@ namespace CabinetManager.core {
         /// </summary>
         /// <param name="reader"></param>
         /// <exception cref="CfCabException"></exception>
-        public void ReadDataHeader(BinaryReader reader) {
+        internal void ReadDataHeaders(BinaryReader reader) {
             if (DataBlocksCount == 0) {
-                throw new CfCabException($"The data block count is {DataBlocksCount}, read the folder header first or correct the data");
+                throw new CfCabException($"The data block count is {DataBlocksCount}, read the folder header first or correct the data.");
             }
 
             uint currentUncompressedDataOffset = 0;
             long currentDataOffset = FirstDataBlockOffset;
             for (int i = 0; i < DataBlocksCount; i++) {
                 var cfData = new CfData(this);
+                if (currentDataOffset >= reader.BaseStream.Length) {
+                    throw new CfCabException($"The end of the stream has been reached, it seems the number of data blocks ({DataBlocksCount}) is incorrect.");
+                }
                 reader.BaseStream.Position = currentDataOffset;
                 cfData.ReadHeader(reader);
                 cfData.UncompressedDataOffset = currentUncompressedDataOffset;
@@ -338,8 +284,8 @@ namespace CabinetManager.core {
                 currentDataOffset = cfData.CompressedDataOffset + cfData.CompressedDataLength;
                 currentUncompressedDataOffset += cfData.UncompressedDataLength;
             }
-
-            DataBlocksCount = 0;
+            
+            _blockReader = new CfDataBlockReader(this);
         }
 
         /// <summary>
@@ -372,7 +318,7 @@ namespace CabinetManager.core {
                         _dataCompressor = new NoCompressionDataCompressor();
                         break;
                     default:
-                        throw new NotImplementedException($"Unimplemented compression type : {CompressionType}");
+                        throw new NotImplementedException($"Unimplemented compression type : {CompressionType}.");
                 }
             }
             return _dataCompressor.CompressData(uncompressedData);
@@ -391,7 +337,7 @@ namespace CabinetManager.core {
                         _dataDecompressor = new NoCompressionDataDecompressor();
                         break;
                     default:
-                        throw new NotImplementedException($"Unimplemented compression type : {CompressionType}");
+                        throw new NotImplementedException($"Unimplemented compression type : {CompressionType}.");
                 }
             }
             return _dataDecompressor.DecompressData(compressedData);
@@ -418,7 +364,7 @@ namespace CabinetManager.core {
         internal byte[] GetFirstDataBlockCompressedData(BinaryReader reader, out ushort uncompressedDataLength) {
             if (Data.Count == 0) {
                 // read data headers if needed
-                ReadDataHeader(reader);
+                ReadDataHeaders(reader);
                 if (Data.Count == 0) {
                     throw new CfCabException($"Could not get the first data block compressed data because there are no data blocks in folder {FolderIndex} and cabinet {_parent.CabPath}.");
                 }

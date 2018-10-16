@@ -1,4 +1,5 @@
 ﻿namespace CabinetManager.core {
+    
     internal enum CfFolderTypeCompress : ushort {
         
         /// <summary>

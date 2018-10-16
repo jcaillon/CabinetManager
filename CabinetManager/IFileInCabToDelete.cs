@@ -18,7 +18,7 @@
 // ========================================================================
 #endregion
 
-namespace Oetools.Utilities.Archive {
+namespace CabinetManager {
     public interface IFileInCabToDelete : IFileCabBase {
         
         

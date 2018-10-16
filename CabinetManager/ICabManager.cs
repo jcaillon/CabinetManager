@@ -17,11 +17,12 @@
 // along with Oetools.Utilities. If not, see <http://www.gnu.org/licenses/>.
 // ========================================================================
 #endregion
+
 using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace Oetools.Utilities.Archive {
+namespace CabinetManager {
 
     public interface ICabManager {
         

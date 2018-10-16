@@ -17,32 +17,25 @@
 // along with Oetools.Utilities. If not, see <http://www.gnu.org/licenses/>.
 // ========================================================================
 #endregion
+
 using System;
 
-namespace Oetools.Utilities.Archive {
+namespace CabinetManager {
     
     public class CabProgressionEventArgs : EventArgs {
         
-        public CabProgressionType ProgressionType { get; set; }
+        public CabProgressionType ProgressionType { get; }
 
-        /// <summary>
-        /// Gets the name of the file being processed. (The name of the file within the Archive; not the external
-        /// file path.) Also includes the internal path of the file, if any.
-        /// </summary>
-        /// <value>
-        /// The name of the file currently being processed, or null if processing
-        /// is currently at the stream or archive level.
-        /// </value>
-        public string SourcePath { get; private set; }
+        public string SourcePath { get; }
         
-        public string RelativePathInArchive { get; private set; }
+        public string RelativePathInCab { get; }
         
-        public string ArchivedPath { get; private set; }
+        public string CabPath { get; }
 
-        public CabProgressionEventArgs(CabProgressionType progressionType, string archivePath, string sourcePath, string relativePathInArchive) {
-            ArchivedPath = archivePath;
+        public CabProgressionEventArgs(CabProgressionType progressionType, string cabPath, string sourcePath, string relativePathInCab) {
+            CabPath = cabPath;
             SourcePath = sourcePath;
-            RelativePathInArchive = relativePathInArchive;
+            RelativePathInCab = relativePathInCab;
             ProgressionType = progressionType;
         }
     }
