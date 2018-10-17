@@ -91,22 +91,13 @@ namespace CabinetManager.core {
         public byte[] ReadUncompressedData(BinaryReader reader) {
             reader.BaseStream.Position = CompressedDataOffset;
 
-            byte[] completeCompressedData;
-            ushort completeUncompressedDataLength;
-            
             if (UncompressedDataLength == 0) {
                 // the compressed data in this data block is only partial and should be continued in the next cabinet file
-                var nextCompressedData = _parent.GetNextCabinetFirstDataBlockCompressedData(out completeUncompressedDataLength);
-                
-                completeCompressedData = new byte[CompressedDataLength + nextCompressedData.Length];
-                Array.Copy(nextCompressedData, 0, completeCompressedData, CompressedDataLength, nextCompressedData.Length);
-
-                var thisBlockCompressedData = ReadCompressedData(reader);
-                Array.Copy(thisBlockCompressedData, completeCompressedData, thisBlockCompressedData.Length);
-            } else {
-                completeUncompressedDataLength = UncompressedDataLength;
-                completeCompressedData = ReadCompressedData(reader);
+                throw new NotImplementedException("An uncompressed length of 0 indicates a partial block data which continues on the next cabinet file but this library does not implement multi-files cabinet yet.");
             }
+            
+            var completeUncompressedDataLength = UncompressedDataLength;
+            var completeCompressedData = ReadCompressedData(reader);
             
             var uncompressedData = _parent.UncompressData(completeCompressedData);
             if (completeUncompressedDataLength != 0 && completeUncompressedDataLength != uncompressedData.Length) {

@@ -22,7 +22,7 @@ using System;
 using CabinetManager;
 
 namespace CabinetManagerTest.Tests {
-    public class FileInCab : IFileInCab, IFileInCabToDelete, IFileInCabToExtract, IFileToAddInCab {
+    public class FileInCab : IFileInCabToDelete, IFileInCabToExtract, IFileToAddInCab {
         public string CabPath { get; set; }
         public string RelativePathInCab { get; set; }
         public ulong SizeInBytes { get; set; }

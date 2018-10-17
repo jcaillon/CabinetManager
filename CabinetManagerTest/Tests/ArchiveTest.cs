@@ -121,7 +121,7 @@ namespace CabinetManagerTest.Tests {
         }
 
         private void ArchiverOnOnProgress(object sender, ICabProgressionEventArgs e) {
-            if (e.EventType == CabEventType.FileCompleted) {
+            if (e.EventType == CabEventType.FileProcessed) {
                 _nbFileFinished++;
             } else if (e.EventType == CabEventType.CabinetCompleted) {
                 _nbArchiveFinished++;

@@ -47,7 +47,7 @@ namespace CabinetManager.@internal {
         internal static CabProgressionEventArgs NewCompletedFile(string cabPath, string relativePathInCab) {
             return new CabProgressionEventArgs {
                 CabPath = cabPath,
-                EventType = CabEventType.FileCompleted,
+                EventType = CabEventType.FileProcessed,
                 RelativePathInCab = relativePathInCab
             };
         }

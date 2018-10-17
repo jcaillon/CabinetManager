@@ -33,7 +33,6 @@ namespace CabinetManager.core {
         }
 
         public void Dispose() {
-            NextCabinet?.Dispose();
             _reader?.Dispose();
         }
 
@@ -236,15 +235,10 @@ namespace CabinetManager.core {
         public bool Exists => File.Exists(CabPath);
 
         /// <summary>
-        /// The next cabinet instance
-        /// </summary>
-        internal CfCabinet NextCabinet { get; private set; }
-
-        /// <summary>
         /// Returns the complete list of files in this cabinet (and contiguous cabinet if they exist
         /// </summary>
         /// <returns></returns>
-        public IEnumerable<CfFile> GetFiles() => Folders.SelectMany(f => f.Files).Concat(NextCabinet?.GetFiles() ?? Enumerable.Empty<CfFile>());
+        public IEnumerable<CfFile> GetFiles() => Folders.SelectMany(f => f.Files);
         
         /// <summary>
         /// Add a new external file to this cabinet file.
@@ -352,11 +346,7 @@ namespace CabinetManager.core {
             int nbFileDeleted = 0;
             // remove existing files with the same name
             foreach (var folder in Folders) {
-                if ((nbFileDeleted += folder.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase))) > 0) {
-                    // case of a file split into several cabinets
-                    nbFileDeleted += NextCabinet?.Folders.FirstOrDefault()?.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase)) ?? 0;
-                    break;
-                }
+                nbFileDeleted += folder.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
             }
             return nbFileDeleted > 0;
         }
@@ -394,7 +384,6 @@ namespace CabinetManager.core {
         
         private void OpenCab() {
             Folders.Clear();
-            NextCabinet = null;
             _dataHeadersRead = false;
             if (Exists) {
                 _reader = new BinaryReader(File.OpenRead(CabPath));
@@ -637,19 +626,6 @@ namespace CabinetManager.core {
                 folder.ReadDataHeaders(reader);
             }
             _dataHeadersRead = true;
-        }
-
-        /// <summary>
-        /// Returns the compressed data of the first data block of the cabinet.
-        /// </summary>
-        /// <remarks>This is used to read a data block that continues on a next cabinet file.</remarks>
-        /// <param name="uncompressedDataLength"></param>
-        /// <returns></returns>
-        internal byte[] GetFirstDataBlockCompressedData(out ushort uncompressedDataLength) {
-            if (Folders.Count == 0) {
-                throw new CfCabException($"Could not get the first data block compressed data because there are no folders in the cabinet {CabPath}.");
-            }
-            return Folders[0].GetFirstDataBlockCompressedData(_reader, out uncompressedDataLength);
         }
 
         /// <summary>

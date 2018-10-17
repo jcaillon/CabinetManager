@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Text;
 using System.Threading;
 using CabinetManager.core.Exceptions;
@@ -362,16 +361,6 @@ namespace CabinetManager.core {
                 }
             }
             return _dataDecompressor.DecompressData(compressedData);
-        }
-
-        /// <summary>
-        /// Returns the compressed data of the first data block of the next cabinet.
-        /// </summary>
-        /// <remarks>This is used to read a data block that continues on a next cabinet file.</remarks>
-        /// <param name="uncompressedDataLength"></param>
-        /// <returns></returns>
-        internal byte[] GetNextCabinetFirstDataBlockCompressedData(out ushort uncompressedDataLength) {
-            return _parent.NextCabinet.GetFirstDataBlockCompressedData(out uncompressedDataLength);
         }
 
         /// <summary>

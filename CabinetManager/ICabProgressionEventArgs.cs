@@ -4,6 +4,7 @@
     /// Sent through the <see cref="ICabManager.OnProgress"/> event.
     /// </summary>
     public interface ICabProgressionEventArgs {
+        
         /// <summary>
         /// The type of event.
         /// </summary>
