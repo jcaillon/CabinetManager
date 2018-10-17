@@ -21,7 +21,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
-using CabinetManager.@internal;
 
 namespace CabinetManager {
 
@@ -77,6 +76,7 @@ namespace CabinetManager {
         /// <summary>
         /// <para>
         /// Extracts the given files from cabinets.
+        /// Requesting the extraction from a non existing cabinet will not throw an exception.
         /// Requesting the extraction a file that does not exist in the cabinet will not throw an exception.
         /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
         /// </para>
@@ -90,6 +90,7 @@ namespace CabinetManager {
         /// <summary>
         /// <para>
         /// Deletes the given files from cabinets.
+        /// Requesting the deletion from a non existing cabinet will not throw an exception.
         /// Requesting the deletion a file that does not exist in the cabinet will not throw an exception.
         /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
         /// </para>

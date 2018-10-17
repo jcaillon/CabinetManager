@@ -54,12 +54,13 @@ namespace CabinetManager {
                         cfCabinet.OnProgress += OnProgressionEvent;
                         try {
                             foreach (var fileToAddInCab in cabGroupedFiles) {
-                                if (File.Exists(fileToAddInCab.SourcePath)) {
-                                    var fileRelativePath = fileToAddInCab.RelativePathInCab.NormalizeRelativePath();
-                                    cfCabinet.AddExternalFile(fileToAddInCab.SourcePath, fileRelativePath);
-                                    nbFilesProcessed++;
-                                    OnProgress?.Invoke(this, CabProgressionEventArgs.NewCompletedFile(cabGroupedFiles.Key, fileToAddInCab.RelativePathInCab));
+                                if (!File.Exists(fileToAddInCab.SourcePath)) {
+                                    continue;
                                 }
+                                var fileRelativePath = fileToAddInCab.RelativePathInCab.NormalizeRelativePath();
+                                cfCabinet.AddExternalFile(fileToAddInCab.SourcePath, fileRelativePath);
+                                nbFilesProcessed++;
+                                OnProgress?.Invoke(this, CabProgressionEventArgs.NewCompletedFile(cabGroupedFiles.Key, fileToAddInCab.RelativePathInCab));
                             }
                             cfCabinet.Save(_compressionType);
                         } finally {
@@ -78,6 +79,9 @@ namespace CabinetManager {
 
         /// <inheritdoc cref="ICabManager.ListFiles"/>
         public IEnumerable<IFileInCab> ListFiles(string cabPath) {
+            if (!File.Exists(cabPath)) {
+                return Enumerable.Empty<IFileInCab>();
+            }
             using (var cfCabinet = new CfCabinet(cabPath, _cancelToken)) {
                 return cfCabinet.GetFiles()
                     .Select(file => new FileInCab {
@@ -94,6 +98,9 @@ namespace CabinetManager {
         public int ExtractFileSet(IEnumerable<IFileInCabToExtract> filesToExtract) {
             int nbFilesProcessed = 0;
             foreach (var cabGroupedFiles in filesToExtract.GroupBy(f => f.CabPath)) {
+                if (!File.Exists(cabGroupedFiles.Key)) {
+                    continue;
+                }
                 try {      
                     // create all necessary extraction folders
                     foreach (var extractDirGroupedFiles in cabGroupedFiles.GroupBy(f => Path.GetDirectoryName(f.ExtractionPath))) {
@@ -129,6 +136,9 @@ namespace CabinetManager {
         public int DeleteFileSet(IEnumerable<IFileInCabToDelete> filesToDeleteIn) {
             int nbFilesProcessed = 0;
             foreach (var cabGroupedFiles in filesToDeleteIn.GroupBy(f => f.CabPath)) {
+                if (!File.Exists(cabGroupedFiles.Key)) {
+                    continue;
+                }
                 try {                
                     using (var cfCabinet = new CfCabinet(cabGroupedFiles.Key, _cancelToken)) {
                         cfCabinet.OnProgress += OnProgressionEvent;
@@ -161,6 +171,9 @@ namespace CabinetManager {
         /// <param name="cabPath"></param>
         /// <returns></returns>
         public string ToString(string cabPath) {
+            if (!File.Exists(cabPath)) {
+                return string.Empty;
+            }
             using (var cfCabinet = new CfCabinet(cabPath, _cancelToken)) {
                 return cfCabinet.GetStringFullRepresentation();
             }
