@@ -21,14 +21,20 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using CabinetManager.@internal;
 
 namespace CabinetManager {
 
+    /// <summary>
+    /// <para>
+    /// A file cabinet manager.
+    /// Allows CRUD operations on windows cabinet file.
+    /// </para>
+    /// </summary>
     public interface ICabManager {
         
-
         /// <summary>
-        /// Sets the compression level to use when archiving.
+        /// Sets the compression level to use for the next <see cref="PackFileSet"/> process.
         /// </summary>
         /// <param name="compressionLevel"></param>
         void SetCompressionLevel(CabCompressionLevel compressionLevel);
@@ -39,46 +45,66 @@ namespace CabinetManager {
         void SetCancellationToken(CancellationToken? cancelToken);
         
         /// <summary>
+        /// <para>
         /// Event published when the archiving process is progressing.
-        /// Either when a new file is archived successfully or when an archive is done.
+        /// </para>
         /// </summary>
-        event EventHandler<CabProgressionEventArgs> OnProgress;
+        event EventHandler<ICabProgressionEventArgs> OnProgress;
         
         /// <summary>
-        /// Pack files into archives.
-        /// Non existing source files will cause an <see cref="CabException"/>.
-        /// Packing into an existing archive will update it.
-        /// Packing existing files with update them.
+        /// <para>
+        /// Pack (i.e. add or replace) files into cabinets.
+        /// Non existing source files will not throw an exception.
+        /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
+        /// Packing into an existing cabinet will update it.
+        /// Packing existing files will update them.
+        /// </para>
         /// </summary>
         /// <param name="filesToPack"></param>
         /// <exception cref="CabException"></exception>
-        void PackFileSet(IEnumerable<IFileToAddInCab> filesToPack);
+        /// <exception cref="OperationCanceledException"></exception>
+        /// <returns>Total number of files actually packed.</returns>
+        int PackFileSet(IEnumerable<IFileToAddInCab> filesToPack);
 
         /// <summary>
-        /// List all the files in an archive.
+        /// List all the files in a cabinet.
         /// </summary>
-        /// <param name="archivePath"></param>
+        /// <param name="cabPath"></param>
         /// <returns></returns>
         /// <exception cref="CabException"></exception>
-        IEnumerable<IFileInCab> ListFiles(string archivePath);
+        IEnumerable<IFileInCab> ListFiles(string cabPath);
         
         /// <summary>
-        /// Extracts the given files from archives.
-        /// Requesting the extraction a file that does not exist in the archive will not throw an exception.
-        /// However, the <see cref="OnProgress"/> event will only be called on actually processed files.
+        /// <para>
+        /// Extracts the given files from cabinets.
+        /// Requesting the extraction a file that does not exist in the cabinet will not throw an exception.
+        /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
+        /// </para>
         /// </summary>
         /// <param name="filesToExtract"></param>
         /// <exception cref="CabException"></exception>
-        void ExtractFileSet(IEnumerable<IFileInCabToExtract> filesToExtract);
+        /// <exception cref="OperationCanceledException"></exception>
+        /// <returns>Total number of files actually extracted.</returns>
+        int ExtractFileSet(IEnumerable<IFileInCabToExtract> filesToExtract);
         
         /// <summary>
-        /// Deletes the given files from archives.
-        /// Requesting the deletion a file that does not exist in the archive will not throw an exception.
-        /// However, the <see cref="OnProgress"/> event will only be called on actually processed files.
+        /// <para>
+        /// Deletes the given files from cabinets.
+        /// Requesting the deletion a file that does not exist in the cabinet will not throw an exception.
+        /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
+        /// </para>
         /// </summary>
         /// <param name="filesToDelete"></param>
         /// <exception cref="CabException"></exception>
-        void DeleteFileSet(IEnumerable<IFileInCabToDelete> filesToDelete);
+        /// <exception cref="OperationCanceledException"></exception>
+        /// <returns>Total number of files actually deleted.</returns>
+        int DeleteFileSet(IEnumerable<IFileInCabToDelete> filesToDelete);
+
+        /// <summary>
+        /// Returns a string representation of the <paramref name="cabPath"/>.
+        /// </summary>
+        /// <returns></returns>
+        string ToString(string cabPath);
     }
 
 }

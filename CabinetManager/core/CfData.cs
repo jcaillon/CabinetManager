@@ -200,7 +200,7 @@ namespace CabinetManager.core {
             CompressedDataOffset = reader.BaseStream.Position;
 
             if (reader.BaseStream.Position - HeaderStreamPosition != DataHeaderLength) {
-                throw new CfCabException($"Data info length expected {DataHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}");
+                throw new CfCabException($"Data info length expected {DataHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}.");
             }
         }
 
@@ -210,7 +210,10 @@ namespace CabinetManager.core {
             returnedValue.AppendLine($"{nameof(CheckSum)} = {CheckSum}");
             returnedValue.AppendLine($"{nameof(CompressedDataLength)} = {CompressedDataLength}");
             returnedValue.AppendLine($"{nameof(UncompressedDataLength)} = {UncompressedDataLength}");
-            returnedValue.AppendLine($"{nameof(DataReservedArea)} = {(DataReservedArea == null ? "null" : Encoding.Default.GetString(DataReservedArea))}");
+            returnedValue.AppendLine($"{nameof(CompressedDataOffset)} = {CompressedDataOffset}");
+            if (DataReservedArea != null) {
+                returnedValue.AppendLine($"{nameof(DataReservedArea)} = {Encoding.Default.GetString(DataReservedArea)}");
+            }
             return returnedValue.ToString();
         }
     }

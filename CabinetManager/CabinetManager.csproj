@@ -12,7 +12,7 @@
     <!-- this will be the product name-->
     <Product>CabinetManager</Product>
     <!-- this will be the file description -->
-    <AssemblyTitle>$(Product) - Manage Microsoft Cabinet Format in pure C#</AssemblyTitle>
+    <AssemblyTitle>$(Product) - CRUD operations for Microsoft Cabinet Format in pure C#.</AssemblyTitle>
     <Copyright>Copyright (c) 2018 - Julien Caillon - GNU General Public License v3</Copyright>
     <ApplicationIcon>
     </ApplicationIcon>
@@ -33,9 +33,12 @@
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/jcaillon/$(Product).git</RepositoryUrl>
     <PackageIconUrl>https://raw.githubusercontent.com/jcaillon/$(Product)/master/docs/logo.png</PackageIconUrl>
-    <PackageReleaseNotes>
+    <PackageReleaseNotes><![CDATA[
+    	Learn more about this project on github: $(RepositoryUrl).
+
+    	See more details about this release on github: https://github.com/jcaillon/$(Product)/releases.]]>
     </PackageReleaseNotes>
-    <PackageTags>cab cabinet microsoft archive manager</PackageTags>
+    <PackageTags>cab cabinet microsoft archive manager cabarc fci fdi mszip lzx cabmaker</PackageTags>
     <PackageOutputPath>$(OutputPath)</PackageOutputPath>
     <!-- allow pdb to be packed with the the nuget package (instead of having a separate pack for debug symbols) -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
@@ -60,7 +63,7 @@
     <!-- throw an exception on overflow instead of failing quietly -->
     <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
     <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
-    <!-- <GenerateDocumentationFile>true</GenerateDocumentationFile> -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <!-- DebugType -->
   <!-- Need to be full if you want .pdb files to work for .net framework <= 4.7.1, otherwise portable is ok -->

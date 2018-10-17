@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading;
 using CabinetManager.core.Exceptions;
 using CabinetManager.Compressor;
 
@@ -130,31 +132,47 @@ namespace CabinetManager.core {
         private IDataDecompressor _dataDecompressor;
         
         private CfFolderTypeCompress _compressionType;
-        
+
         /// <summary>
-        /// Reads data from <param name="reader"></param> and read them into <param name="targetStream"></param>
+        /// Extract a file from the cabinet using data from <see cref="Data"/>.
         /// </summary>
         /// <param name="reader"></param>
-        /// <param name="targetStream"></param>
         /// <param name="fileRelativePathInCab"></param>
-        public void ExtractData(BinaryReader reader, Stream targetStream, string fileRelativePathInCab) {
-            _blockReader.InitializeToReadFile(fileRelativePathInCab);
+        /// <param name="extractionPath"></param>
+        /// <param name="cancelToken"></param>
+        /// <param name="progress"></param>
+        public void ExtractFileFromDataBlocks(BinaryReader reader, string fileRelativePathInCab, string extractionPath, CancellationToken? cancelToken, Action<CfSaveEventArgs> progress) {
 
-            var dataBlockBuffer = new byte[CfData.MaxUncompressedDataLength];
-            int nbBytesRead;
-            while ((nbBytesRead = _blockReader.ReadUncompressedData(reader, dataBlockBuffer, 0, dataBlockBuffer.Length)) > 0) {
-                targetStream.Write(dataBlockBuffer, 0, nbBytesRead);
+            _blockReader.InitializeToReadFile(fileRelativePathInCab);
+            
+            using (Stream targetStream = File.OpenWrite(extractionPath)) {
+                var dataBlockBuffer = new byte[CfData.MaxUncompressedDataLength];
+                int nbBytesRead;
+                while ((nbBytesRead = _blockReader.ReadUncompressedData(reader, dataBlockBuffer, 0, dataBlockBuffer.Length)) > 0) {
+                    targetStream.Write(dataBlockBuffer, 0, nbBytesRead);
+                    progress?.Invoke(CfSaveEventArgs.New(fileRelativePathInCab, nbBytesRead));
+                    cancelToken?.ThrowIfCancellationRequested();
+                }
             }
         }
         
-        public void SaveFolder(BinaryReader reader, BinaryWriter writer, Action<CfSaveProgressionEventArgs> progress) {
-            
+        /// <summary>
+        /// Saves the data blocks of this folder into the <paramref name="writer"/> stream.
+        /// </summary>
+        /// <param name="reader"></param>
+        /// <param name="writer"></param>
+        /// <param name="cancelToken"></param>
+        /// <param name="progress"></param>
+        /// <exception cref="CfCabException"></exception>
+        /// <exception cref="CfCabFileMissingException"></exception>
+        public void WriteFolderDataBlocks(BinaryReader reader, BinaryWriter writer, CancellationToken? cancelToken, Action<CfSaveEventArgs> progress) {
+           
             var dataBlockBuffer = new byte[CfData.MaxUncompressedDataLength];
             var dataBlockBufferPosition = 0;
             long uncompressedDataOffset = 0;
             Data.Clear();
             
-            void PushToNewDataBlock() {           
+            void WriteNewDataBlock() {           
                 if (Data.Count + 1 > FolderMaximumDataBlockCount) {
                     throw new CfCabException($"The total number of data block for this folder {FolderIndex} exceeds the limit of {FolderMaximumDataBlockCount}.");
                 }
@@ -180,6 +198,8 @@ namespace CabinetManager.core {
             }
 
             foreach (var file in Files) { // .OrderBy(f => f.UncompressedFileSize)
+                cancelToken?.ThrowIfCancellationRequested();
+                
                 var bytesLeftInBuffer = dataBlockBuffer.Length - dataBlockBufferPosition;
                 
                 if (!string.IsNullOrEmpty(file.AbsolutePath)) {
@@ -190,12 +210,13 @@ namespace CabinetManager.core {
                         int nbBytesRead;
                         while ((nbBytesRead = sourceStream.Read(dataBlockBuffer, dataBlockBufferPosition, bytesLeftInBuffer)) > 0) {
                             dataBlockBufferPosition += nbBytesRead;
-                            if (dataBlockBuffer.Length - dataBlockBufferPosition <= 0) { // < 0 should never happen
+                            if (dataBlockBuffer.Length - dataBlockBufferPosition <= 0) {
                                 // buffer full, flush it
-                                PushToNewDataBlock();
+                                WriteNewDataBlock();
                             }
                             bytesLeftInBuffer = dataBlockBuffer.Length - dataBlockBufferPosition;
-                            // TODO : file progress
+                            progress?.Invoke(CfSaveEventArgs.New(file.RelativePathInCab, nbBytesRead));
+                            cancelToken?.ThrowIfCancellationRequested();
                         }
                     }
                 } else {                   
@@ -203,22 +224,22 @@ namespace CabinetManager.core {
                     int nbBytesRead;
                     while ((nbBytesRead = _blockReader.ReadUncompressedData(reader, dataBlockBuffer, dataBlockBufferPosition, bytesLeftInBuffer)) > 0) {
                         dataBlockBufferPosition += nbBytesRead;
-                        if (dataBlockBuffer.Length - dataBlockBufferPosition <= 0) { // < 0 should never happen
+                        if (dataBlockBuffer.Length - dataBlockBufferPosition <= 0) {
                             // buffer full, flush it
-                            PushToNewDataBlock();
+                            WriteNewDataBlock();
                         }
                         bytesLeftInBuffer = dataBlockBuffer.Length - dataBlockBufferPosition;
+                        progress?.Invoke(CfSaveEventArgs.New(file.RelativePathInCab, nbBytesRead));
+                        cancelToken?.ThrowIfCancellationRequested();
                     }
                 }
 
                 uncompressedDataOffset += file.UncompressedFileSize;
-                
-                progress?.Invoke(CfSaveProgressionEventArgs.NewFinishedFile(file.RelativePathInCab));
             }
 
             if (dataBlockBufferPosition > 0) {
                 // flush data block
-                PushToNewDataBlock();
+                WriteNewDataBlock();
             }
         }
 
@@ -295,7 +316,7 @@ namespace CabinetManager.core {
         /// <exception cref="CfCabException"></exception>
         public void UpdateDataBlockInfo(BinaryWriter writer) {
             if (HeaderStreamPosition == 0) {
-                throw new CfCabException("Write or read before updating");
+                throw new CfCabException("Write or read before updating.");
             }
 
             var previousStreamPos = writer.BaseStream.Position;
@@ -381,7 +402,9 @@ namespace CabinetManager.core {
             returnedValue.AppendLine($"{nameof(FirstDataBlockOffset)} = {FirstDataBlockOffset}");
             returnedValue.AppendLine($"{nameof(DataBlocksCount)} = {DataBlocksCount}");
             returnedValue.AppendLine($"{nameof(CompressionType)} = {CompressionType}");
-            returnedValue.AppendLine($"{nameof(FolderReservedArea)} = {(FolderReservedArea == null ? "null" : Encoding.Default.GetString(FolderReservedArea))}");
+            if (FolderReservedArea != null) {
+                returnedValue.AppendLine($"{nameof(FolderReservedArea)} = {Encoding.Default.GetString(FolderReservedArea)}");
+            }
             returnedValue.AppendLine();
 
             foreach (var cfFile in Files) {

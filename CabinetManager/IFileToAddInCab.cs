@@ -18,11 +18,15 @@
 // ========================================================================
 #endregion
 namespace CabinetManager {
+    
+    /// <summary>
+    /// Represents an external file that needs to be packed (archived/added) into a cabinet file.
+    /// </summary>
     public interface IFileToAddInCab : IFileCabBase {
         
         /// <summary>
         /// The path of the file to archive.
         /// </summary>
-        string SourcePath { get; set; }
+        string SourcePath { get; }
     }
 }

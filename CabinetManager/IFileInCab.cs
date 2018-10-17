@@ -21,17 +21,23 @@
 using System;
 
 namespace CabinetManager {
+    
+    /// <summary>
+    /// Describes a file present in a cabinet file.
+    /// </summary>
     public interface IFileInCab : IFileCabBase {
                
         /// <summary>
         /// File size in bytes.
         /// </summary>
-        /// <remarks>This is the real file size once extracted from the cabinet file.</remarks>
-        ulong SizeInBytes { get; set; }
+        /// <remarks>
+        /// This is the real file size once extracted from the cabinet file.
+        /// </remarks>
+        ulong SizeInBytes { get; }
         
         /// <summary>
         /// Date last modified.
         /// </summary>
-        DateTime LastWriteTime { get; set; }
+        DateTime LastWriteTime { get; }
     }
 }

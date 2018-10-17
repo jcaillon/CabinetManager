@@ -19,6 +19,10 @@
 #endregion
 
 namespace CabinetManager {
+    
+    /// <summary>
+    /// Basic file describer.
+    /// </summary>
     public interface IFileCabBase {
         
         /// <summary>
@@ -27,9 +31,12 @@ namespace CabinetManager {
         string CabPath { get; }
         
         /// <summary>
+        /// <para>
         /// Relative path of the file within the cabinet file.
+        /// This path is normalized to windows style path inside the cabinet (i.e. using \ instead of /).
+        /// </para>
         /// </summary>
-        string RelativePathInCab { get; set; }
+        string RelativePathInCab { get; }
         
     }
 }

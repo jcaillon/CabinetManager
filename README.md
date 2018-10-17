@@ -2,6 +2,8 @@
 
 Handles microsoft cabinet format (.cab files) in pure C#.
 
+[![logo](docs/logo.png)](https://jcaillon.github.io/CabinetManager/)
+
 Status | Info
 ------ | --------
 [![Build status](https://ci.appveyor.com/api/projects/status/8v4fn7trm69554ih/branch/master?svg=true)](https://ci.appveyor.com/project/jcaillon/cabinetmanager) | Windows CI Provided By [AppVeyor][]
@@ -10,25 +12,27 @@ Status | Info
 [![Total downloads](https://img.shields.io/github/downloads/jcaillon/CabinetManager/total.svg)](https://github.com/jcaillon/CabinetManager/releases) | Total download
 [![GPLv3 licence](https://img.shields.io/badge/License-GPLv3-74A5C2.svg)](https://github.com/jcaillon/CabinetManager/blob/master/LICENSE) | GPLv3 License
 
-[![logo](docs/logo.png)](https://jcaillon.github.io/CabinetManager/)
 
 [AppVeyor]:http://www.appveyor.com/
 [Nuget]:https://www.nuget.org/packages/Noyacode.CabinetManager/
 
 ## About
 
-## Microsoft cabinet file specifications
+### Microsoft cabinet file specifications
+
+This library implements the following specifications:
 
 [https://msdn.microsoft.com/en-us/library/bb417343.aspx#cabinet_format](https://msdn.microsoft.com/en-us/library/bb417343.aspx#cabinet_format)
 
-## TODO, implement compression algo
+### Limitations of this lib
 
-- [MSZIP](https://msdn.microsoft.com/library/bb417343.aspx#microsoftmszipdatacompressionformat)
-- [LZX](https://msdn.microsoft.com/en-us/library/bb417343.aspx#lzxdatacompressionformat)
-- Quantum does not seems to be used very often...
+This library is not a complete implementation of the specifications (mostly because I didn't need all the features).
 
-Note : c++ implementation -> https://github.com/coderforlife/ms-compress/tree/master/src
-https://www.samba.org/~tridge/mszip/cabextract
+The limitations are listed below:
+
+- Does not handle multi-cabinet file (a single cabinet can hold up to ~2Gb of data)
+- Does not handle compressed data, you can only store/retrieve uncompressed data
+- Does not compute nor verify checksums
 
 ## Thanks
 

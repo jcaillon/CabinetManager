@@ -20,10 +20,13 @@
 namespace CabinetManager {
     
     /// <summary>
-    /// Compression level for cabinet files.
+    /// Compression level for folders in a cabinet.
     /// </summary>
     public enum CabCompressionLevel {
-        /// <summary>Do not compress files, only store.</summary>
+        
+        /// <summary>
+        /// Do not compress files, only store.
+        /// </summary>
         None
     }
 }

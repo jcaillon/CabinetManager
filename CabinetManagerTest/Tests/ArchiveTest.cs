@@ -36,13 +36,20 @@ namespace CabinetManagerTest.Tests {
             
             _nbFileFinished = 0;
             _nbArchiveFinished = 0;
-            
+
             var modifiedList = listFiles.GetRange(1, listFiles.Count - 1);
-            cabManager.PackFileSet(modifiedList);
+            
+            // try to add a non existing file
+            modifiedList.Add(new FileInCab {
+                CabPath = listFiles.First().CabPath,
+                ExtractionPath = listFiles.First().ExtractionPath,
+                RelativePathInCab = "random.name"
+            });
+            Assert.AreEqual(modifiedList.Count - 1, cabManager.PackFileSet(modifiedList));
             
             // test the update of archives
             modifiedList = listFiles.GetRange(0, 1);
-            cabManager.PackFileSet(modifiedList);
+            Assert.AreEqual(modifiedList.Count, cabManager.PackFileSet(modifiedList));
  
             foreach (var archive in listFiles.GroupBy(f => f.CabPath)) {
                 if (Directory.Exists(Path.GetDirectoryName(archive.Key))) {
@@ -70,14 +77,14 @@ namespace CabinetManagerTest.Tests {
             _nbFileFinished = 0;
             _nbArchiveFinished = 0;
             
-            // try to add a non existing file
+            // try to extract a non existing file
             var modifiedList = listFiles.ToList();
             modifiedList.Add(new FileInCab {
                 CabPath = listFiles.First().CabPath,
                 ExtractionPath = listFiles.First().ExtractionPath,
                 RelativePathInCab = "random.name"
             });
-            cabManager.ExtractFileSet(modifiedList);
+            Assert.AreEqual(modifiedList.Count - 1, cabManager.ExtractFileSet(modifiedList));
             
             foreach (var fileToExtract in listFiles) {
                 Assert.IsTrue(File.Exists(fileToExtract.ExtractionPath), $"Extracted file does not exist : {fileToExtract.ExtractionPath}");
@@ -94,14 +101,14 @@ namespace CabinetManagerTest.Tests {
             _nbFileFinished = 0;
             _nbArchiveFinished = 0;
 
-            // try to add a non existing file
+            // try to delete a non existing file
             var modifiedList = listFiles.ToList();
             modifiedList.Add(new FileInCab {
                 CabPath = listFiles.First().CabPath,
                 ExtractionPath = listFiles.First().ExtractionPath,
                 RelativePathInCab = "random.name"
             });
-            cabManager.DeleteFileSet(modifiedList);
+            Assert.AreEqual(modifiedList.Count - 1, cabManager.DeleteFileSet(modifiedList));
             
             foreach (var groupedFiles in listFiles.GroupBy(f => f.CabPath)) {
                 var files = cabManager.ListFiles(groupedFiles.Key);
@@ -113,10 +120,10 @@ namespace CabinetManagerTest.Tests {
             Assert.AreEqual(listFiles.GroupBy(f => f.CabPath).Count(), _nbArchiveFinished, "Problem in the progress event, number of archives");
         }
 
-        private void ArchiverOnOnProgress(object sender, CabProgressionEventArgs e) {
-            if (e.ProgressionType == CabProgressionType.FileProcessed) {
+        private void ArchiverOnOnProgress(object sender, ICabProgressionEventArgs e) {
+            if (e.EventType == CabEventType.FileCompleted) {
                 _nbFileFinished++;
-            } else if (e.ProgressionType == CabProgressionType.ArchiveCompleted) {
+            } else if (e.EventType == CabEventType.CabinetCompleted) {
                 _nbArchiveFinished++;
             }
         }

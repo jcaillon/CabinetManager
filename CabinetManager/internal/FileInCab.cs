@@ -1,7 +1,7 @@
 #region header
 // ========================================================================
 // Copyright (c) 2018 - Julien Caillon (julien.caillon@gmail.com)
-// This file (CfSaveProgressionType.cs) is part of CabinetManager.
+// This file (FileInCab.cs) is part of CabinetManager.
 // 
 // CabinetManager is a free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
@@ -18,12 +18,13 @@
 // ========================================================================
 #endregion
 
-namespace CabinetManager.core {
-    internal enum CfSaveProgressionType : byte {
-        /// <summary>Status message for the percentage progression of each file.</summary>
-        FileProgression,
-        
-        /// <summary>Status message after completion of the packing or unpacking an individual file.</summary>
-        FileCompleted
+using System;
+
+namespace CabinetManager.@internal {
+    internal class FileInCab : IFileInCab {
+        public string CabPath { get; set; }
+        public string RelativePathInCab { get; set; }
+        public ulong SizeInBytes { get; set; }
+        public DateTime LastWriteTime { get; set; }
     }
 }

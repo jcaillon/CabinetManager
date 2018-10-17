@@ -25,7 +25,7 @@ namespace CabinetManager.core {
         /// </summary>
         internal const uint FileMaximumUncompressedSize = 0x7FFF8000;    
 
-        internal CfFolder Parent { private get; set; }
+        internal CfFolder Parent { get; set; }
 
         public CfFile(CfFolder parent) {
             Parent = parent;
@@ -101,26 +101,6 @@ namespace CabinetManager.core {
         private long HeaderStreamPosition { get; set; }
 
         /// <summary>
-        /// Extracts this file to an external path
-        /// </summary>
-        /// <param name="reader"></param>
-        /// <param name="toPath"></param>
-        internal void ExtractToFile(BinaryReader reader, string toPath) {
-            using (Stream targetStream = File.OpenWrite(toPath)) {
-                Parent.ExtractData(reader, targetStream, RelativePathInCab);
-            }
-
-            File.SetCreationTime(toPath, FileDateTime);
-            File.SetLastWriteTime(toPath, FileDateTime);
-            if (FileAttributes.HasFlag(CfFileAttribs.Rdonly)) {
-                File.SetAttributes(toPath, System.IO.FileAttributes.ReadOnly);
-            }
-            if (FileAttributes.HasFlag(CfFileAttribs.Hiddden)) {
-                File.SetAttributes(toPath, System.IO.FileAttributes.Hidden);
-            }
-        }
-
-        /// <summary>
         /// Write this instance of <see cref="CfFile"/> to a stream
         /// </summary>
         public void WriteFileHeader(BinaryWriter writer) {
@@ -144,11 +124,11 @@ namespace CabinetManager.core {
             writer.Write((ushort) FileAttributes);
             var lght = writer.WriteNullTerminatedString(RelativePathInCab, nameEncoding);
             if (lght >= CabPathMaximumLength) {
-                throw new CfCabException($"The file path ({RelativePathInCab}) exceeds the maximum authorised length of {CabPathMaximumLength} with {lght}");
+                throw new CfCabException($"The file path ({RelativePathInCab}) exceeds the maximum authorised length of {CabPathMaximumLength} with {lght}.");
             }
             
             if (writer.BaseStream.Position - HeaderStreamPosition != FileHeaderLength) {
-                throw new CfCabException($"File info length expected {FileHeaderLength} vs actual {writer.BaseStream.Position - HeaderStreamPosition}");
+                throw new CfCabException($"File info length expected {FileHeaderLength} vs actual {writer.BaseStream.Position - HeaderStreamPosition}.");
             }
         }
         
@@ -177,7 +157,7 @@ namespace CabinetManager.core {
             RelativePathInCab = reader.ReadNullTerminatedString(nameEncoding);
 
             if (reader.BaseStream.Position - HeaderStreamPosition != FileHeaderLength) {
-                throw new CfCabException($"File info length expected {FileHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}");
+                throw new CfCabException($"File info length expected {FileHeaderLength} vs actual {reader.BaseStream.Position - HeaderStreamPosition}.");
             }
         }
 

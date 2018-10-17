@@ -52,12 +52,15 @@ namespace CabinetManager.core {
         /// Initialize this instance to read the file <paramref name="relativeFilePathInCab"/>.
         /// </summary>
         /// <param name="relativeFilePathInCab"></param>
-        public void InitializeToReadFile(string relativeFilePathInCab) {
+        /// <returns>true if the file exists and the initialization is correct, false otherwise</returns>
+        public bool InitializeToReadFile(string relativeFilePathInCab) {
             if (_existingFileInfo.ContainsKey(relativeFilePathInCab)) {
                 _uncompressedFileOffsetToRead = _existingFileInfo[relativeFilePathInCab].Item1;
                 _uncompressedFileLengthLeftToRead = _existingFileInfo[relativeFilePathInCab].Item2;
                 _currentDataBlockNumber = -1;
+                return true;
             }
+            return false;
         }
 
         /// <summary>

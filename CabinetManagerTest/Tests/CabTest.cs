@@ -7,6 +7,7 @@ using CabinetManagerTest.Compression.Cab;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace CabinetManagerTest.Tests {
+    
     [TestClass]
     public class CabTest : ArchiveTest {
         private static string _testFolder;

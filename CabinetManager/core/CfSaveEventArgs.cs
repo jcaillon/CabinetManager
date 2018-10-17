@@ -22,27 +22,20 @@ using System;
 
 namespace CabinetManager.core {
     
-    internal class CfSaveProgressionEventArgs : EventArgs {
-        
-        public CfSaveProgressionType ProgressionType { get; private set; }
+    internal class CfSaveEventArgs : EventArgs {
         
         public string RelativePathInCab { get; private set; }
         
-        public decimal FilePercentageDone { get; private set; }
+        public long TotalBytesToProcess { get; set; }
+        
+        public long TotalBytesDone { get; set; }
+        
+        public long BytesDone { get; private set; }
 
-        public static CfSaveProgressionEventArgs NewFinishedFile(string relativePathInCab) {
-            return new CfSaveProgressionEventArgs {
-                ProgressionType = CfSaveProgressionType.FileCompleted,
+        public static CfSaveEventArgs New(string relativePathInCab, long bytesDone) {
+            return new CfSaveEventArgs {
                 RelativePathInCab = relativePathInCab,
-                FilePercentageDone = 100
-            };
-        }
-
-        public static CfSaveProgressionEventArgs NewFileProgress(string relativePathInCab, decimal filePercentageDone) {
-            return new CfSaveProgressionEventArgs {
-                ProgressionType = CfSaveProgressionType.FileProgression,
-                RelativePathInCab = relativePathInCab,
-                FilePercentageDone = filePercentageDone
+                BytesDone = bytesDone
             };
         }
     }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using CabinetManager.core.Exceptions;
 using CabinetManager.Utilities;
 
@@ -25,8 +26,9 @@ namespace CabinetManager.core {
     /// </summary>
     internal class CfCabinet : IDisposable {
         
-        public CfCabinet(string cabPath) {
+        public CfCabinet(string cabPath, CancellationToken? cancelToken) {
             CabPath = cabPath;
+            _cancelToken = cancelToken;
             OpenCab();
         }
 
@@ -36,6 +38,13 @@ namespace CabinetManager.core {
         }
 
         private BinaryReader _reader;
+        
+        private readonly CancellationToken? _cancelToken;
+        
+        /// <summary>
+        /// Event published when saving this cabinet, allows to follow the progression of the process.
+        /// </summary>
+        public event EventHandler<CfSaveEventArgs> OnSaveProgression;
 
         /// <summary>
         /// The maximum size for this cabinet file, size limitation of <see cref="CabinetSize"/>
@@ -244,6 +253,7 @@ namespace CabinetManager.core {
         /// <param name="relativePathInCab"></param>
         /// <exception cref="CfCabException"></exception>
         public void AddExternalFile(string sourcePath, string relativePathInCab) {
+            
             if (!_dataHeadersRead) {
                 ReadDataHeaders(_reader);
             }
@@ -289,6 +299,7 @@ namespace CabinetManager.core {
             if (sourceFileAttributes.HasFlag(FileAttributes.Hidden)) {
                 addedFile.FileAttributes |= CfFileAttribs.Hiddden;
             }
+            
             Folders[idx].Files.Add(addedFile);
         }
 
@@ -301,13 +312,38 @@ namespace CabinetManager.core {
         public bool ExtractToFile(string relativePathInCab, string extractionPath) {
             if (!_dataHeadersRead) {
                 ReadDataHeaders(_reader);
+            }      
+            
+            var fileToExtract = Folders.SelectMany(folder => folder.Files).FirstOrDefault(file => file.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
+            if (fileToExtract == null) {
+                return false;
             }
             
-            var fileInCab = Folders.SelectMany(folder => folder.Files).FirstOrDefault(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
-            fileInCab?.ExtractToFile(_reader, extractionPath);
-            return fileInCab != null;
+            long totalNumberOfBytes = fileToExtract.UncompressedFileSize;
+            long totalNumberOfBytesDone = 0;
+            
+            void Progress(CfSaveEventArgs args) {
+                totalNumberOfBytesDone += args.BytesDone;
+                args.TotalBytesToProcess = totalNumberOfBytes;
+                args.TotalBytesDone = totalNumberOfBytesDone;
+                OnSaveProgression?.Invoke(this, args);
+            }
+           
+            fileToExtract.Parent.ExtractFileFromDataBlocks(_reader, relativePathInCab, extractionPath, _cancelToken, Progress);
+            
+            File.SetCreationTime(extractionPath, fileToExtract.FileDateTime);
+            File.SetLastWriteTime(extractionPath, fileToExtract.FileDateTime);
+            if (fileToExtract.FileAttributes.HasFlag(CfFileAttribs.Rdonly)) {
+                File.SetAttributes(extractionPath, FileAttributes.ReadOnly);
+            }
+
+            if (fileToExtract.FileAttributes.HasFlag(CfFileAttribs.Hiddden)) {
+                File.SetAttributes(extractionPath, FileAttributes.Hidden);
+            }
+            
+            return true;
         }
-        
+
         public bool DeleteFile(string relativePathInCab) {
             if (!_dataHeadersRead) {
                 ReadDataHeaders(_reader);
@@ -328,7 +364,7 @@ namespace CabinetManager.core {
         /// <summary>
         /// Save this instance of <see cref="CfCabinet"/> to <see cref="CabPath"/>.
         /// </summary>
-        public void Save(CfFolderTypeCompress compressionType, Action<CfSaveProgressionEventArgs> progress) {
+        public void Save(CfFolderTypeCompress compressionType) {
             if (!_dataHeadersRead) {
                 ReadDataHeaders(_reader);
             }
@@ -342,7 +378,7 @@ namespace CabinetManager.core {
                     writer.BaseStream.Position = 0;
                     WriteHeaderToStream(writer);
                     WriteFileAndFolderHeaders(writer, compressionType);
-                    WriteData(writer, progress);
+                    WriteDataBlocks(writer);
                     UpdateCabinetSize(writer);
                 }
                 _reader?.Dispose();
@@ -378,18 +414,16 @@ namespace CabinetManager.core {
             while (!string.IsNullOrEmpty(NextCabinetFileName)) {
                 var cabDirectory = Path.GetDirectoryName(CabPath);
                 if (string.IsNullOrEmpty(cabDirectory)) {
-                    throw new CfCabException($"Invalid directory name for {CabPath}");
+                    throw new CfCabException($"Invalid directory name for {CabPath}.");
                 }
 
                 var nextCabinetFilePath = Path.Combine(cabDirectory, NextCabinetFileName);
                 if (!File.Exists(nextCabinetFilePath)) {
-                    throw new CfCabException($"Could not find the next cabinet file {NextCabinetFileName} in {cabDirectory}");
+                    throw new CfCabException($"Could not find the next cabinet file {NextCabinetFileName} in {cabDirectory}.");
                 }
 
-                NextCabinet = new CfCabinet(nextCabinetFilePath);
-                    
                 // crash now because we won't be able to correctly read data later anyway...
-                throw new NotImplementedException("The management of several consecutive cabinet files is not implemented yet");
+                throw new NotImplementedException("The management of several consecutive cabinet files is not implemented yet.");
             }
         }
 
@@ -406,9 +440,6 @@ namespace CabinetManager.core {
             writer.Write(FoldersCount);
             writer.Write(FilesCount);
             writer.Write((ushort) Flags);
-            if (SetId == 0) {
-                SetId = (ushort) new Random().Next(ushort.MaxValue);
-            }
             writer.Write(SetId);
             writer.Write(CabinetNumber);
 
@@ -416,7 +447,7 @@ namespace CabinetManager.core {
 
             if (Flags.HasFlag(CfHeaderFlag.CfhdrReservePresent)) {
                 if (CabinetReservedArea.Length > MaxCabinetReservedAreaDataLength) {
-                    throw new CfCabException($"Maximum cabinet reserved data length is {MaxCabinetReservedAreaDataLength}, you try to use {CabinetReservedArea.Length}");
+                    throw new CfCabException($"Maximum cabinet reserved data length is {MaxCabinetReservedAreaDataLength}, you try to use {CabinetReservedArea.Length}.");
                 }
 
                 writer.Write((ushort) CabinetReservedArea.Length);
@@ -471,14 +502,29 @@ namespace CabinetManager.core {
             }
         }
 
-        private void WriteData(BinaryWriter writer, Action<CfSaveProgressionEventArgs> progress) {
+        private void WriteDataBlocks(BinaryWriter writer) {
+
+            long totalNumberOfBytes = 0;
+            foreach (var folder in Folders) {
+                totalNumberOfBytes += folder.FolderUncompressedSize;
+            }
+
+            long totalNumberOfBytesDone = 0;
+            
+            void WriteDataProgress(CfSaveEventArgs args) {
+                totalNumberOfBytesDone += args.BytesDone;
+                args.TotalBytesToProcess = totalNumberOfBytes;
+                args.TotalBytesDone = totalNumberOfBytesDone;
+                OnSaveProgression?.Invoke(this, args);
+            }
+            
             foreach (var folder in Folders) { // .OrderBy(f => f.FolderIndex)
                 folder.FirstDataBlockOffset = (uint) writer.BaseStream.Position;
-                folder.SaveFolder(_reader, writer, progress);
+                folder.WriteFolderDataBlocks(_reader, writer, _cancelToken, WriteDataProgress);
                 folder.UpdateDataBlockInfo(writer);
             }
         }
-        
+
         private void UpdateCabinetSize(BinaryWriter writer) {
             if (writer.BaseStream.Length > CabinetMaximumSize) {
                 throw new CfCabException($"The cabinet size exceeds the maximum of ({CabinetMaximumSize}) bytes with {writer.BaseStream.Length}.");
@@ -509,7 +555,7 @@ namespace CabinetManager.core {
             // u1 versionMajor
             _versionMajor = reader.ReadByte();
             if (_versionMinor != CabVersionMinor || _versionMajor != CabVersionMajor) {
-                throw new CfCabException($"Cab version expected {CabVersionMajor}.{CabVersionMinor}, actual {_versionMajor}.{_versionMinor}");
+                throw new CfCabException($"Cab version expected {CabVersionMajor}.{CabVersionMinor}, actual {_versionMajor}.{_versionMinor}.");
             }
 
             // u2 cFolders
@@ -530,7 +576,7 @@ namespace CabinetManager.core {
                 var cabinetReservedAreaLength = reader.ReadUInt16();
                 CabinetReservedArea = new byte[cabinetReservedAreaLength];
                 if (CabinetReservedArea.Length > MaxCabinetReservedAreaDataLength) {
-                    throw new CfCabException($"Maximum cabinet reserved data length is {MaxCabinetReservedAreaDataLength}, used {CabinetReservedArea.Length}");
+                    throw new CfCabException($"Maximum cabinet reserved data length is {MaxCabinetReservedAreaDataLength}, used {CabinetReservedArea.Length}.");
                 }
 
                 // u1 cbCFFolder(optional)
@@ -558,7 +604,7 @@ namespace CabinetManager.core {
             }
 
             if (reader.BaseStream.Position != HeaderLength) {
-                throw new CfCabException($"Header length expected {HeaderLength} vs actual {reader.BaseStream.Position}");
+                throw new CfCabException($"Header length expected {HeaderLength} vs actual {reader.BaseStream.Position}.");
             }
         }
 
@@ -611,8 +657,8 @@ namespace CabinetManager.core {
         /// </summary>
         /// <returns></returns>
         public string GetStringFullRepresentation() {
-            foreach (var folder in Folders) {
-                folder.ReadDataHeaders(_reader);
+            if (!_dataHeadersRead) {
+                ReadDataHeaders(_reader);
             }
             return ToString();
         }

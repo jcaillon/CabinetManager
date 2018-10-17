@@ -18,6 +18,10 @@
 // ========================================================================
 #endregion
 namespace CabinetManager {
+    
+    /// <summary>
+    /// Represents a file in a cabinet file that needs to be extracted from it.
+    /// </summary>
     public interface IFileInCabToExtract : IFileCabBase {
         
         /// <summary>
