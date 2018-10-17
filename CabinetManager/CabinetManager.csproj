@@ -3,6 +3,8 @@
     <!-- Exe or Library-->
     <OutputType>Library</OutputType>
     <AssemblyName>CabinetManager</AssemblyName>
+    <!-- RepositoryName is a custom variable, should be the name of the github repo -->
+    <RepositoryName>CabinetManager</RepositoryName>
     <RootNamespace>$(AssemblyName)</RootNamespace>
     <Version>1.0.0-beta</Version>
     <!-- Assembly.GetExecutingAssembly().GetName().Version = $(Version) but completed if necessary to make a 4 digit version and without what is after the dash -->
@@ -10,15 +12,17 @@
     <!-- FileVersionInfo.GetVersionInfo(Assembly.GetExecutingAssembly().Location).FileVersion = $(FileVersion) -->
     <FileVersion>$(VersionPrefix)</FileVersion>
     <!-- this will be the product name-->
-    <Product>CabinetManager</Product>
+    <Product>$(AssemblyName)</Product>
     <!-- this will be the file description -->
-    <AssemblyTitle>$(Product) - CRUD operations for Microsoft Cabinet Format in pure C#.</AssemblyTitle>
+    <AssemblyTitle>CRUD operations for Microsoft Cabinet Format in pure C#.</AssemblyTitle>
     <Copyright>Copyright (c) 2018 - Julien Caillon - GNU General Public License v3</Copyright>
     <ApplicationIcon>
     </ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Label="Package info basic">
-    <Title>$(AssemblyTitle)</Title>
+  	<!-- Small text that will appear under the package name in nuget -->
+    <Title>$(AssemblyName)</Title>
+    <!-- The package description -->
     <Description>$(AssemblyTitle)</Description>
     <Company>Noyacode</Company>
     <Authors>jcailon</Authors>
@@ -28,15 +32,15 @@
     <PackageId>$(Company).$(AssemblyName)</PackageId>
     <PackageVersion>$(Version)</PackageVersion>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-    <PackageLicenseUrl>https://github.com/jcaillon/$(Product)/blob/master/LICENSE</PackageLicenseUrl>
-    <PackageProjectUrl>https://github.com/jcaillon/$(Product)</PackageProjectUrl>
+    <PackageLicenseUrl>https://github.com/jcaillon/$(RepositoryName)/blob/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://jcaillon.github.io/$(RepositoryName)</PackageProjectUrl>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/jcaillon/$(Product).git</RepositoryUrl>
-    <PackageIconUrl>https://raw.githubusercontent.com/jcaillon/$(Product)/master/docs/logo.png</PackageIconUrl>
+    <RepositoryUrl>https://github.com/jcaillon/$(RepositoryName).git</RepositoryUrl>
+    <PackageIconUrl>https://raw.githubusercontent.com/jcaillon/$(RepositoryName)/master/docs/logo.png</PackageIconUrl>
     <PackageReleaseNotes><![CDATA[
-Learn more about this project on github: $(RepositoryUrl).
+Learn more about this project on github: $(PackageProjectUrl).
 
-See more details about this release on github: https://github.com/jcaillon/$(Product)/releases.]]>
+See more details about this release on github: https://github.com/jcaillon/$(RepositoryName)/releases.]]>
     </PackageReleaseNotes>
     <PackageTags>cab cabinet microsoft archive manager cabarc fci fdi mszip lzx cabmaker</PackageTags>
     <PackageOutputPath>$(OutputPath)</PackageOutputPath>
