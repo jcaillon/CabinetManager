@@ -19,6 +19,7 @@
 #endregion
 
 using System;
+using System.IO;
 
 namespace CabinetManager.@internal {
     internal class FileInCab : IFileInCab {
@@ -26,5 +27,6 @@ namespace CabinetManager.@internal {
         public string RelativePathInCab { get; set; }
         public ulong SizeInBytes { get; set; }
         public DateTime LastWriteTime { get; set; }
+        public FileAttributes FileAttributes { get; set; }
     }
 }

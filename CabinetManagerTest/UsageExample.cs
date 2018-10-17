@@ -22,15 +22,22 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using CabinetManager;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace CabinetManagerTest {
     
+    [TestClass]
     public class UsageExample {
         
-        public static int Main_(string[] args) {
+        [TestMethod]
+        public void Main() {
 
+            Console.WriteLine("Creating dumb file.");
+            File.WriteAllText(@"my_source_file.txt", @"my content");
+            
             var cabManager = CabManager.New();
             
             cabManager.SetCompressionLevel(CabCompressionLevel.None);
@@ -38,10 +45,11 @@ namespace CabinetManagerTest {
             cabManager.OnProgress += CabManagerOnProgress;
 
             // Add files to a new or existing cabinet
+            Console.WriteLine("Adding file to cabinet.");
             var nbProcessed = cabManager.PackFileSet(new List<IFileToAddInCab> {
                 CabFile.NewToPack(@"archive.cab", @"folder\file.txt", @"my_source_file.txt")
             });
-            
+
             Console.WriteLine($" -> {nbProcessed} files were added to a cabinet.");
 
             // List all the files in a cabinet
@@ -49,22 +57,23 @@ namespace CabinetManagerTest {
 
             Console.WriteLine("Listing files:");
             foreach (var fileInCab in filesInCab) {
-                Console.WriteLine($"{fileInCab.RelativePathInCab}: {fileInCab.LastWriteTime}, {fileInCab.SizeInBytes}");
+                Console.WriteLine($" * {fileInCab.RelativePathInCab}: {fileInCab.LastWriteTime}, {fileInCab.SizeInBytes}, {fileInCab.FileAttributes}");
             }
 
             // Extract files to external paths
+            Console.WriteLine("Extract file from cabinet.");
             nbProcessed = cabManager.ExtractFileSet(new List<IFileInCabToExtract> {
                 CabFile.NewToExtract(@"archive.cab", @"folder\file.txt", @"extraction_path.txt")
             });
-            
+
             Console.WriteLine($" -> {nbProcessed} files were extracted from a cabinet.");
 
             // Delete files in a cabinet
+            Console.WriteLine("Delete file in cabinet.");
             nbProcessed = cabManager.DeleteFileSet(filesInCab.Select(f => CabFile.NewToDelete(f.CabPath, f.RelativePathInCab)));
-            
+
             Console.WriteLine($" -> {nbProcessed} files were deleted from a cabinet.");
-            
-            return 0;
+
         }
 
         private static void CabManagerOnProgress(object sender, ICabProgressionEventArgs e) {

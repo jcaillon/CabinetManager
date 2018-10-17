@@ -51,7 +51,7 @@ namespace CabinetManager {
             foreach (var cabGroupedFiles in filesToPackIn.GroupBy(f => f.CabPath)) {
                 try {                
                     using (var cfCabinet = new CfCabinet(cabGroupedFiles.Key, _cancelToken)) {
-                        cfCabinet.OnSaveProgression += OnSaveProgression;
+                        cfCabinet.OnProgress += OnProgressionEvent;
                         try {
                             foreach (var fileToAddInCab in cabGroupedFiles) {
                                 if (File.Exists(fileToAddInCab.SourcePath)) {
@@ -63,7 +63,7 @@ namespace CabinetManager {
                             }
                             cfCabinet.Save(_compressionType);
                         } finally {
-                            cfCabinet.OnSaveProgression -= OnSaveProgression;
+                            cfCabinet.OnProgress -= OnProgressionEvent;
                         }
                     }
                 } catch (OperationCanceledException) {
@@ -84,7 +84,8 @@ namespace CabinetManager {
                         CabPath = cabPath,
                         RelativePathInCab = file.RelativePathInCab,
                         LastWriteTime = file.FileDateTime,
-                        SizeInBytes = file.UncompressedFileSize
+                        SizeInBytes = file.UncompressedFileSize,
+                        FileAttributes = GetFileAttributes(file.FileAttributes)
                     } as IFileInCab);
             }
         }
@@ -101,7 +102,7 @@ namespace CabinetManager {
                         }
                     }
                     using (var cfCabinet = new CfCabinet(cabGroupedFiles.Key, _cancelToken)) {
-                        cfCabinet.OnSaveProgression += OnSaveProgression;
+                        cfCabinet.OnProgress += OnProgressionEvent;
                         try {
                             foreach (var fileInCabToExtract in cabGroupedFiles) {
                                 var fileRelativePath = fileInCabToExtract.RelativePathInCab.NormalizeRelativePath();
@@ -111,7 +112,7 @@ namespace CabinetManager {
                                 }
                             }
                         } finally {
-                            cfCabinet.OnSaveProgression -= OnSaveProgression;
+                            cfCabinet.OnProgress -= OnProgressionEvent;
                         }
                     }
                 } catch (OperationCanceledException) {
@@ -130,7 +131,7 @@ namespace CabinetManager {
             foreach (var cabGroupedFiles in filesToDeleteIn.GroupBy(f => f.CabPath)) {
                 try {                
                     using (var cfCabinet = new CfCabinet(cabGroupedFiles.Key, _cancelToken)) {
-                        cfCabinet.OnSaveProgression += OnSaveProgression;
+                        cfCabinet.OnProgress += OnProgressionEvent;
                         try {
                             foreach (var fileToAddInCab in cabGroupedFiles) {
                                 var fileRelativePath = fileToAddInCab.RelativePathInCab.NormalizeRelativePath();
@@ -141,7 +142,7 @@ namespace CabinetManager {
                             }
                             cfCabinet.Save(_compressionType);
                         } finally {
-                            cfCabinet.OnSaveProgression -= OnSaveProgression;
+                            cfCabinet.OnProgress -= OnProgressionEvent;
                         }
                     }
                 } catch (OperationCanceledException) {
@@ -165,10 +166,21 @@ namespace CabinetManager {
             }
         }
 
-        private void OnSaveProgression(object sender, CfSaveEventArgs e) {
+        private void OnProgressionEvent(object sender, CfSaveEventArgs e) {
             if (sender is CfCabinet cabinet) {
                 OnProgress?.Invoke(this, CabProgressionEventArgs.NewProgress(cabinet.CabPath, e.RelativePathInCab, Math.Round(e.TotalBytesDone / (double) e.TotalBytesToProcess * 100, 2)));
             }
+        }
+
+        private FileAttributes GetFileAttributes(CfFileAttribs fileFileAttributes) {
+            FileAttributes attr = 0;
+            if (fileFileAttributes.HasFlag(CfFileAttribs.Hiddden)) {
+                attr |= FileAttributes.Hidden;
+            }
+            if (fileFileAttributes.HasFlag(CfFileAttribs.Rdonly)) {
+                attr |= FileAttributes.ReadOnly;
+            }
+            return attr;
         }
         
     }

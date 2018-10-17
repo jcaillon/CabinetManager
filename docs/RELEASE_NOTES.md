@@ -1,0 +1,3 @@
+## Improvements
+
+Added `IFileInCab.FileAttributes`.

@@ -19,6 +19,7 @@
 #endregion
 
 using System;
+using System.IO;
 
 namespace CabinetManager {
     
@@ -39,5 +40,10 @@ namespace CabinetManager {
         /// Date last modified.
         /// </summary>
         DateTime LastWriteTime { get; }
+        
+        /// <summary>
+        /// File attributes inside the cabinet.
+        /// </summary>
+        FileAttributes FileAttributes { get; }
     }
 }

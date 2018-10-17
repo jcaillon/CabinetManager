@@ -34,9 +34,9 @@
     <RepositoryUrl>https://github.com/jcaillon/$(Product).git</RepositoryUrl>
     <PackageIconUrl>https://raw.githubusercontent.com/jcaillon/$(Product)/master/docs/logo.png</PackageIconUrl>
     <PackageReleaseNotes><![CDATA[
-    	Learn more about this project on github: $(RepositoryUrl).
+Learn more about this project on github: $(RepositoryUrl).
 
-    	See more details about this release on github: https://github.com/jcaillon/$(Product)/releases.]]>
+See more details about this release on github: https://github.com/jcaillon/$(Product)/releases.]]>
     </PackageReleaseNotes>
     <PackageTags>cab cabinet microsoft archive manager cabarc fci fdi mszip lzx cabmaker</PackageTags>
     <PackageOutputPath>$(OutputPath)</PackageOutputPath>

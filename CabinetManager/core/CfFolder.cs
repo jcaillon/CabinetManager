@@ -51,7 +51,7 @@ namespace CabinetManager.core {
 
         public CfFolder(CfCabinet parent) {
             _parent = parent;
-                 }
+         }
 
         /// <summary>
         /// This folder index, starting at 0
@@ -170,6 +170,7 @@ namespace CabinetManager.core {
             var dataBlockBufferPosition = 0;
             long uncompressedDataOffset = 0;
             Data.Clear();
+            DataBlocksCount = 0;
             
             void WriteNewDataBlock() {           
                 if (Data.Count + 1 > FolderMaximumDataBlockCount) {
@@ -287,7 +288,7 @@ namespace CabinetManager.core {
         /// <exception cref="CfCabException"></exception>
         internal void ReadDataHeaders(BinaryReader reader) {
             if (DataBlocksCount == 0) {
-                throw new CfCabException($"The data block count is {DataBlocksCount}, read the folder header first or correct the data.");
+                return;
             }
 
             uint currentUncompressedDataOffset = 0;
@@ -361,27 +362,6 @@ namespace CabinetManager.core {
                 }
             }
             return _dataDecompressor.DecompressData(compressedData);
-        }
-
-        /// <summary>
-        /// Returns the compressed data of the first data block of the folder.
-        /// </summary>
-        /// <remarks>This is used to read a data block that continues on a next cabinet file.</remarks>
-        /// <param name="reader"></param>
-        /// <param name="uncompressedDataLength"></param>
-        /// <returns></returns>
-        /// <exception cref="CfCabException"></exception>
-        internal byte[] GetFirstDataBlockCompressedData(BinaryReader reader, out ushort uncompressedDataLength) {
-            if (Data.Count == 0) {
-                // read data headers if needed
-                ReadDataHeaders(reader);
-                if (Data.Count == 0) {
-                    throw new CfCabException($"Could not get the first data block compressed data because there are no data blocks in folder {FolderIndex} and cabinet {_parent.CabPath}.");
-                }
-            }
-
-            uncompressedDataLength = Data[0].UncompressedDataLength;
-            return Data[0].ReadCompressedData(reader);
         }
 
         public override string ToString() {

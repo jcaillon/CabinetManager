@@ -43,7 +43,7 @@ namespace CabinetManager.core {
         /// <summary>
         /// Event published when saving this cabinet, allows to follow the progression of the process.
         /// </summary>
-        public event EventHandler<CfSaveEventArgs> OnSaveProgression;
+        public event EventHandler<CfSaveEventArgs> OnProgress;
 
         /// <summary>
         /// The maximum size for this cabinet file, size limitation of <see cref="CabinetSize"/>
@@ -320,7 +320,7 @@ namespace CabinetManager.core {
                 totalNumberOfBytesDone += args.BytesDone;
                 args.TotalBytesToProcess = totalNumberOfBytes;
                 args.TotalBytesDone = totalNumberOfBytesDone;
-                OnSaveProgression?.Invoke(this, args);
+                OnProgress?.Invoke(this, args);
             }
            
             fileToExtract.Parent.ExtractFileFromDataBlocks(_reader, relativePathInCab, extractionPath, _cancelToken, Progress);
@@ -504,7 +504,7 @@ namespace CabinetManager.core {
                 totalNumberOfBytesDone += args.BytesDone;
                 args.TotalBytesToProcess = totalNumberOfBytes;
                 args.TotalBytesDone = totalNumberOfBytesDone;
-                OnSaveProgression?.Invoke(this, args);
+                OnProgress?.Invoke(this, args);
             }
             
             foreach (var folder in Folders) { // .OrderBy(f => f.FolderIndex)
