@@ -20,37 +20,42 @@
     </ApplicationIcon>
   </PropertyGroup>
   <PropertyGroup Label="Package info basic">
-  	<!-- Small text that will appear under the package name in nuget -->
+    <Company>Noyacode</Company>
+    <Authors>jcailon</Authors>
+    <PackageId>$(Company).$(AssemblyName)</PackageId>
+    <!-- Small text that will appear under the package name in nuget -->
     <Title>$(AssemblyName)</Title>
     <!-- The package description -->
     <Description>$(AssemblyTitle)</Description>
-    <Company>Noyacode</Company>
-    <Authors>jcailon</Authors>
   </PropertyGroup>
   <PropertyGroup Label="Package info">
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
-    <PackageId>$(Company).$(AssemblyName)</PackageId>
     <PackageVersion>$(Version)</PackageVersion>
+    <PackageTags>cab cabinet microsoft archive manager cabarc fci fdi mszip lzx cabmaker</PackageTags>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageLicenseUrl>https://github.com/jcaillon/$(RepositoryName)/blob/master/LICENSE</PackageLicenseUrl>
     <PackageProjectUrl>https://jcaillon.github.io/$(RepositoryName)</PackageProjectUrl>
+    <PackageIconUrl>https://raw.githubusercontent.com/jcaillon/$(RepositoryName)/master/docs/logo.png</PackageIconUrl>
     <RepositoryType>git</RepositoryType>
     <RepositoryUrl>https://github.com/jcaillon/$(RepositoryName).git</RepositoryUrl>
-    <PackageIconUrl>https://raw.githubusercontent.com/jcaillon/$(RepositoryName)/master/docs/logo.png</PackageIconUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <PackageReleaseNotes><![CDATA[
 Learn more about this project on github: $(PackageProjectUrl).
 
 See more details about this release on github: https://github.com/jcaillon/$(RepositoryName)/releases.]]>
     </PackageReleaseNotes>
-    <PackageTags>cab cabinet microsoft archive manager cabarc fci fdi mszip lzx cabmaker</PackageTags>
     <PackageOutputPath>$(OutputPath)</PackageOutputPath>
     <!-- allow pdb to be packed with the the nuget package (instead of having a separate pack for debug symbols) -->
     <AllowedOutputExtensionsInPackageBuildOutputFolder>$(AllowedOutputExtensionsInPackageBuildOutputFolder);.pdb</AllowedOutputExtensionsInPackageBuildOutputFolder>
-    <IncludeSource>true</IncludeSource>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSource>true</IncludeSource>
     <IncludeSymbols>true</IncludeSymbols>
     <IsPackable>true</IsPackable>
   </PropertyGroup>
+  <!-- https://github.com/dotnet/sourcelink -->
+  <ItemGroup Label="PackageReference specific for your source control provider">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0-beta-63127-02" PrivateAssets="All"/>
+  </ItemGroup>
   <PropertyGroup Label="Compilation info">
     <!-- https://docs.microsoft.com/en-us/dotnet/standard/frameworks -->
     <TargetFrameworks>net461;netstandard2.0</TargetFrameworks>
