@@ -22,12 +22,13 @@ using System;
 using CabinetManager;
 
 namespace CabinetManagerTest.Tests {
-    public class FileInCab : IFileInCabToDelete, IFileInCabToExtract, IFileToAddInCab {
+    public class FileInCab : IFileInCabToDelete, IFileInCabToExtract, IFileToAddInCab, IFileInCabToMove {
         public string CabPath { get; set; }
         public string RelativePathInCab { get; set; }
         public ulong SizeInBytes { get; set; }
         public DateTime LastWriteTime { get; set; }
         public string ExtractionPath { get; set; }
         public string SourcePath { get; set; }
+        public string NewRelativePathInCab { get; set; }
     }
 }

@@ -132,6 +132,10 @@ namespace CabinetManager.core {
         
         private CfFolderTypeCompress _compressionType;
 
+        public bool RenameFile(string oldName, string newName) {
+            return _blockReader.RenameFile(oldName, newName);
+        }
+
         /// <summary>
         /// Extract a file from the cabinet using data from <see cref="Data"/>.
         /// </summary>

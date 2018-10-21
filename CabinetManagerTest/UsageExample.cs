@@ -67,10 +67,17 @@ namespace CabinetManagerTest {
             });
 
             Console.WriteLine($" -> {nbProcessed} files were extracted from a cabinet.");
+            
+            // Move files within a cabinet
+            var filesToMove = filesInCab.Select(f => CabFile.NewToMove(f.CabPath, f.RelativePathInCab, $"subfolder/{f.RelativePathInCab}")).ToList();
+            Console.WriteLine("Moving files within a cabinet.");
+            nbProcessed = cabManager.MoveFileSet(filesToMove);
+
+            Console.WriteLine($" -> {nbProcessed} files were moved within the cabinet.");
 
             // Delete files in a cabinet
             Console.WriteLine("Delete file in cabinet.");
-            nbProcessed = cabManager.DeleteFileSet(filesInCab.Select(f => CabFile.NewToDelete(f.CabPath, f.RelativePathInCab)));
+            nbProcessed = cabManager.DeleteFileSet(filesToMove.Select(f => CabFile.NewToDelete(f.CabPath, f.NewRelativePathInCab)));
 
             Console.WriteLine($" -> {nbProcessed} files were deleted from a cabinet.");
 
@@ -90,12 +97,13 @@ namespace CabinetManagerTest {
             }
         }
 
-        private class CabFile : IFileInCabToDelete, IFileInCabToExtract, IFileToAddInCab {
+        private class CabFile : IFileInCabToDelete, IFileInCabToExtract, IFileToAddInCab, IFileInCabToMove {
             
             public string CabPath { get; private set; }
             public string RelativePathInCab { get; private set; }
             public string ExtractionPath { get; private set; }
             public string SourcePath { get; private set; }
+            public string NewRelativePathInCab { get; private set; }
 
             public static CabFile NewToPack(string cabPath, string relativePathInCab, string sourcePath) {
                 return new CabFile {
@@ -119,7 +127,14 @@ namespace CabinetManagerTest {
                     RelativePathInCab = relativePathInCab
                 };
             }
-            
+
+            public static CabFile NewToMove(string cabPath, string relativePathInCab, string newRelativePathInCab) {
+                return new CabFile {
+                    CabPath = cabPath,
+                    RelativePathInCab = relativePathInCab,
+                    NewRelativePathInCab = newRelativePathInCab
+                };
+            }
         }
     }
 }

@@ -44,7 +44,7 @@ namespace CabinetManager.@internal {
         /// </summary>
         public double PercentageDone { get; private set; }
         
-        internal static CabProgressionEventArgs NewCompletedFile(string cabPath, string relativePathInCab) {
+        internal static CabProgressionEventArgs NewProcessedFile(string cabPath, string relativePathInCab) {
             return new CabProgressionEventArgs {
                 CabPath = cabPath,
                 EventType = CabEventType.FileProcessed,

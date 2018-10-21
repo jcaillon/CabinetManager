@@ -60,7 +60,7 @@ namespace CabinetManager {
                                 var fileRelativePath = fileToAddInCab.RelativePathInCab.NormalizeRelativePath();
                                 cfCabinet.AddExternalFile(fileToAddInCab.SourcePath, fileRelativePath);
                                 nbFilesProcessed++;
-                                OnProgress?.Invoke(this, CabProgressionEventArgs.NewCompletedFile(cabGroupedFiles.Key, fileToAddInCab.RelativePathInCab));
+                                OnProgress?.Invoke(this, CabProgressionEventArgs.NewProcessedFile(cabGroupedFiles.Key, fileRelativePath));
                             }
                             cfCabinet.Save(_compressionType);
                         } finally {
@@ -115,7 +115,7 @@ namespace CabinetManager {
                                 var fileRelativePath = fileInCabToExtract.RelativePathInCab.NormalizeRelativePath();
                                 if (cfCabinet.ExtractToFile(fileRelativePath, fileInCabToExtract.ExtractionPath)) {
                                     nbFilesProcessed++;
-                                    OnProgress?.Invoke(this, CabProgressionEventArgs.NewCompletedFile(cabGroupedFiles.Key, fileInCabToExtract.RelativePathInCab));
+                                    OnProgress?.Invoke(this, CabProgressionEventArgs.NewProcessedFile(cabGroupedFiles.Key, fileRelativePath));
                                 }
                             }
                         } finally {
@@ -147,7 +147,7 @@ namespace CabinetManager {
                                 var fileRelativePath = fileToAddInCab.RelativePathInCab.NormalizeRelativePath();
                                 if (cfCabinet.DeleteFile(fileRelativePath)) {
                                     nbFilesProcessed++;
-                                    OnProgress?.Invoke(this, CabProgressionEventArgs.NewCompletedFile(cabGroupedFiles.Key, fileToAddInCab.RelativePathInCab));
+                                    OnProgress?.Invoke(this, CabProgressionEventArgs.NewProcessedFile(cabGroupedFiles.Key, fileRelativePath));
                                 }
                             }
                             cfCabinet.Save(_compressionType);
@@ -164,7 +164,40 @@ namespace CabinetManager {
             }
             return nbFilesProcessed;
         }
-        
+
+        /// <inheritdoc cref="ICabManager.MoveFileSet"/>
+        public int MoveFileSet(IEnumerable<IFileInCabToMove> filesToMove) {
+            int nbFilesProcessed = 0;
+            foreach (var cabGroupedFiles in filesToMove.GroupBy(f => f.CabPath)) {
+                if (!File.Exists(cabGroupedFiles.Key)) {
+                    continue;
+                }
+                try {                
+                    using (var cfCabinet = new CfCabinet(cabGroupedFiles.Key, _cancelToken)) {
+                        cfCabinet.OnProgress += OnProgressionEvent;
+                        try {
+                            foreach (var fileToAddInCab in cabGroupedFiles) {
+                                var fileRelativePath = fileToAddInCab.RelativePathInCab.NormalizeRelativePath();
+                                if (cfCabinet.MoveFile(fileRelativePath, fileToAddInCab.NewRelativePathInCab.NormalizeRelativePath())) {
+                                    nbFilesProcessed++;
+                                    OnProgress?.Invoke(this, CabProgressionEventArgs.NewProcessedFile(cabGroupedFiles.Key, fileRelativePath));
+                                }
+                            }
+                            cfCabinet.Save(_compressionType);
+                        } finally {
+                            cfCabinet.OnProgress -= OnProgressionEvent;
+                        }
+                    }
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (Exception e) {
+                    throw new CabException($"Failed to move files from {cabGroupedFiles.Key}.", e);
+                }
+                OnProgress?.Invoke(this, CabProgressionEventArgs.NewCompletedCabinet(cabGroupedFiles.Key));
+            }
+            return nbFilesProcessed;
+        }
+
         /// <summary>
         /// Returns a string representation of a given cabinet file.
         /// </summary>

@@ -58,6 +58,8 @@ namespace CabinetManagerTest.Tests {
             }
             
             CreateArchive(archiver, listFiles);
+            
+            MoveInArchives(archiver, listFiles);
 
             // verify
             ListArchive(archiver, listFiles);

@@ -119,6 +119,39 @@ namespace CabinetManagerTest.Tests {
             Assert.AreEqual(listFiles.Count, _nbFileFinished, "Problem in the progress event");
             Assert.AreEqual(listFiles.GroupBy(f => f.CabPath).Count(), _nbArchiveFinished, "Problem in the progress event, number of archives");
         }
+        
+        protected void MoveInArchives(ICabManager cabManager, List<FileInCab> listFiles) {
+            cabManager.OnProgress += ArchiverOnOnProgress;
+            _nbFileFinished = 0;
+            _nbArchiveFinished = 0;
+            
+            // try to move a non existing file
+            var modifiedList = listFiles.ToList();
+            modifiedList.Add(new FileInCab {
+                CabPath = listFiles.First().CabPath,
+                ExtractionPath = listFiles.First().ExtractionPath,
+                RelativePathInCab = "random.name"
+            });
+            modifiedList.ForEach(f => f.NewRelativePathInCab = $"{f.RelativePathInCab}_move");
+
+            Assert.AreEqual(modifiedList.Count - 1, cabManager.MoveFileSet(modifiedList));
+
+            cabManager.OnProgress -= ArchiverOnOnProgress;
+            Assert.AreEqual(listFiles.Count, _nbFileFinished, "Problem in the progress event");
+            Assert.AreEqual(listFiles.GroupBy(f => f.CabPath).Count(), _nbArchiveFinished, "Problem in the progress event, number of archives");
+            
+            // move them back
+            modifiedList.ForEach(f => {
+                f.RelativePathInCab = f.NewRelativePathInCab;
+                f.NewRelativePathInCab = f.NewRelativePathInCab.Substring(0, f.NewRelativePathInCab.Length - 5);
+            });
+            
+            Assert.AreEqual(modifiedList.Count - 1, cabManager.MoveFileSet(modifiedList));
+            
+            modifiedList.ForEach(f => {
+                f.RelativePathInCab = f.NewRelativePathInCab;
+            });
+        }
 
         private void ArchiverOnOnProgress(object sender, ICabProgressionEventArgs e) {
             if (e.EventType == CabEventType.FileProcessed) {

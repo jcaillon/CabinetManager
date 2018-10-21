@@ -49,6 +49,25 @@ namespace CabinetManager.core {
         }
 
         /// <summary>
+        /// To call when a file is renamed, so that we are sure to take the right data for the file.
+        /// </summary>
+        /// <param name="oldName"></param>
+        /// <param name="newName"></param>
+        /// <returns></returns>
+        public bool RenameFile(string oldName, string newName) {
+            if (_existingFileInfo.ContainsKey(oldName)) {
+                if (_existingFileInfo.ContainsKey(newName)) {
+                    _existingFileInfo.Remove(newName);
+                }
+                _existingFileInfo.Add(newName, _existingFileInfo[oldName]);
+                _existingFileInfo.Remove(oldName);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Initialize this instance to read the file <paramref name="relativeFilePathInCab"/>.
         /// </summary>
         /// <param name="relativeFilePathInCab"></param>

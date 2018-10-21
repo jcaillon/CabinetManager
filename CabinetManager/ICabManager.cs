@@ -100,6 +100,20 @@ namespace CabinetManager {
         /// <exception cref="OperationCanceledException"></exception>
         /// <returns>Total number of files actually deleted.</returns>
         int DeleteFileSet(IEnumerable<IFileInCabToDelete> filesToDelete);
+        
+        /// <summary>
+        /// <para>
+        /// Moves the given files within cabinets.
+        /// Requesting the movement from a non existing cabinet will not throw an exception.
+        /// Requesting the movement a file that does not exist in the cabinet will not throw an exception.
+        /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
+        /// </para>
+        /// </summary>
+        /// <param name="filesToMove"></param>
+        /// <exception cref="CabException"></exception>
+        /// <exception cref="OperationCanceledException"></exception>
+        /// <returns>Total number of files actually deleted.</returns>
+        int MoveFileSet(IEnumerable<IFileInCabToMove> filesToMove);
 
         /// <summary>
         /// Returns a string representation of the <paramref name="cabPath"/>.

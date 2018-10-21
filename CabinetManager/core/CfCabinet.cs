@@ -338,17 +338,47 @@ namespace CabinetManager.core {
             return true;
         }
 
+        /// <summary>
+        /// Delete a file within this cabinet.
+        /// </summary>
+        /// <param name="relativePathInCab"></param>
+        /// <returns></returns>
         public bool DeleteFile(string relativePathInCab) {
             if (!_dataHeadersRead) {
                 ReadDataHeaders(_reader);
             }
             
             int nbFileDeleted = 0;
-            // remove existing files with the same name
+            // Remove existing files with the same name (there could be many if the file is spread over several folders/cabinets).
             foreach (var folder in Folders) {
                 nbFileDeleted += folder.Files.RemoveAll(f => f.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
             }
             return nbFileDeleted > 0;
+        }
+
+        /// <summary>
+        /// Move (i.e. change the relative path) a file within this cabinet.
+        /// </summary>
+        /// <param name="relativePathInCab"></param>
+        /// <param name="newRelativePathInCab"></param>
+        /// <returns></returns>
+        public bool MoveFile(string relativePathInCab, string newRelativePathInCab) {
+            if (!_dataHeadersRead) {
+                ReadDataHeaders(_reader);
+            }
+            
+            var fileToMove = Folders.SelectMany(folder => folder.Files).FirstOrDefault(file => file.RelativePathInCab.Equals(relativePathInCab, StringComparison.OrdinalIgnoreCase));
+            if (fileToMove == null) {
+                return false;
+            }
+
+            if (!fileToMove.Parent.RenameFile(relativePathInCab, newRelativePathInCab)) {
+                return false;
+            }
+
+            fileToMove.RelativePathInCab = newRelativePathInCab;
+            
+            return true;
         }
         
         /// <summary>
