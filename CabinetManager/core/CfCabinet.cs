@@ -322,8 +322,14 @@ namespace CabinetManager.core {
                 args.TotalBytesDone = totalNumberOfBytesDone;
                 OnProgress?.Invoke(this, args);
             }
-           
-            fileToExtract.Parent.ExtractFileFromDataBlocks(_reader, relativePathInCab, extractionPath, _cancelToken, Progress);
+
+            try {
+                fileToExtract.Parent.ExtractFileFromDataBlocks(_reader, relativePathInCab, extractionPath, _cancelToken, Progress);
+            } finally {
+                if (File.Exists(extractionPath)) {
+                    File.Delete(extractionPath);
+                }
+            }
             
             File.SetCreationTime(extractionPath, fileToExtract.FileDateTime);
             File.SetLastWriteTime(extractionPath, fileToExtract.FileDateTime);

@@ -1,3 +1,4 @@
 ## Improvements
 
-Added ICabManager.MoveFileSet to the API.
+- Correctly clean up half extracted files if a cancellation is requested during `ExtractFileSet`.
+- 
