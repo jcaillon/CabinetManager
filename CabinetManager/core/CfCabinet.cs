@@ -325,10 +325,11 @@ namespace CabinetManager.core {
 
             try {
                 fileToExtract.Parent.ExtractFileFromDataBlocks(_reader, relativePathInCab, extractionPath, _cancelToken, Progress);
-            } finally {
+            } catch(OperationCanceledException) {
                 if (File.Exists(extractionPath)) {
                     File.Delete(extractionPath);
                 }
+                throw;
             }
             
             File.SetCreationTime(extractionPath, fileToExtract.FileDateTime);
