@@ -18,9 +18,11 @@
 // ========================================================================
 #endregion
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using CabinetManager;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -28,16 +30,31 @@ namespace CabinetManagerTest.Tests {
     
     public class ArchiveTest {
 
-        private int _nbFileFinished;
+        private int _nbFileProcessed;
         private int _nbArchiveFinished;
+        private bool _hasReceivedGlobalProgression;
+        private CancellationTokenSource _cancelSource;
         
-        protected void CreateArchive(ICabManager cabManager, List<FileInCab> listFiles) {
-            cabManager.OnProgress += ArchiverOnOnProgress;
+        protected void CreateArchive(ICabManager archiver, List<FileInCab> listFiles) {
+            archiver.OnProgress += ArchiverOnOnProgress;
             
-            _nbFileFinished = 0;
+            _nbFileProcessed = 0;
             _nbArchiveFinished = 0;
 
             var modifiedList = listFiles.GetRange(1, listFiles.Count - 1);
+            
+            // Test the cancellation.
+            _cancelSource = new CancellationTokenSource();
+            archiver.SetCancellationToken(_cancelSource.Token);
+            var list = modifiedList;
+            Assert.ThrowsException<OperationCanceledException>(() => archiver.PackFileSet(list));
+            Assert.IsTrue(_nbArchiveFinished == 0, "Nothing was done again.");
+            _nbFileProcessed = 0;
+            _cancelSource = null;
+            archiver.SetCancellationToken(null);
+
+            _nbFileProcessed = 0;
+            CleanupArchives(listFiles);
             
             // try to add a non existing file
             modifiedList.Add(new FileInCab {
@@ -45,20 +62,23 @@ namespace CabinetManagerTest.Tests {
                 ExtractionPath = listFiles.First().ExtractionPath,
                 RelativePathInCab = "random.name"
             });
-            Assert.AreEqual(modifiedList.Count - 1, cabManager.PackFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, archiver.PackFileSet(modifiedList));
             
             // test the update of archives
             modifiedList = listFiles.GetRange(0, 1);
-            Assert.AreEqual(modifiedList.Count, cabManager.PackFileSet(modifiedList));
- 
+            Assert.AreEqual(modifiedList.Count, archiver.PackFileSet(modifiedList));
+
             foreach (var archive in listFiles.GroupBy(f => f.CabPath)) {
                 if (Directory.Exists(Path.GetDirectoryName(archive.Key))) {
                     Assert.IsTrue(File.Exists(archive.Key), $"The archive does not exist : {archive}");
                 }
             }
+
+            archiver.OnProgress -= ArchiverOnOnProgress;
             
-            cabManager.OnProgress -= ArchiverOnOnProgress;
-            Assert.AreEqual(listFiles.Count, _nbFileFinished, "Problem in the progress event");
+            // check progress
+            Assert.IsTrue(_hasReceivedGlobalProgression, "Should have received a progress event.");
+            Assert.AreEqual(listFiles.Count, _nbFileProcessed, "Problem in the progress event");
             Assert.AreEqual(listFiles.GroupBy(f => f.CabPath).Count() + 1, _nbArchiveFinished, "Problem in the progress event, number of archives");
         }
 
@@ -72,60 +92,88 @@ namespace CabinetManagerTest.Tests {
             }
         }
 
-        protected void Extract(ICabManager cabManager, List<FileInCab> listFiles) {
-            cabManager.OnProgress += ArchiverOnOnProgress;
-            _nbFileFinished = 0;
+        protected void Extract(ICabManager archiver, List<FileInCab> listFiles) {
+            archiver.OnProgress += ArchiverOnOnProgress;
+            _nbFileProcessed = 0;
             _nbArchiveFinished = 0;
+
+            var modifiedList = listFiles.ToList();
+            
+            // Test the cancellation.
+            _cancelSource = new CancellationTokenSource();
+            archiver.SetCancellationToken(_cancelSource.Token);
+            var list = modifiedList;
+            Assert.ThrowsException<OperationCanceledException>(() => archiver.ExtractFileSet(list));
+            Assert.IsTrue(_nbArchiveFinished == 0, "Nothing was done again.");
+            _nbFileProcessed = 0;
+            _cancelSource = null;
+            archiver.SetCancellationToken(null);
             
             // try to extract a non existing file
-            var modifiedList = listFiles.ToList();
             modifiedList.Add(new FileInCab {
                 CabPath = listFiles.First().CabPath,
                 ExtractionPath = listFiles.First().ExtractionPath,
                 RelativePathInCab = "random.name"
             });
-            Assert.AreEqual(modifiedList.Count - 1, cabManager.ExtractFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, archiver.ExtractFileSet(modifiedList));
             
             foreach (var fileToExtract in listFiles) {
                 Assert.IsTrue(File.Exists(fileToExtract.ExtractionPath), $"Extracted file does not exist : {fileToExtract.ExtractionPath}");
                 Assert.AreEqual(File.ReadAllText(fileToExtract.SourcePath), File.ReadAllText(fileToExtract.ExtractionPath), "Incoherent extracted file content");
             }
             
-            cabManager.OnProgress -= ArchiverOnOnProgress;
-            Assert.AreEqual(listFiles.Count, _nbFileFinished, "Problem in the progress event");
+            archiver.OnProgress -= ArchiverOnOnProgress;
+            
+            // check progress
+            Assert.IsTrue(_hasReceivedGlobalProgression, "Should have received a progress event.");
+            Assert.AreEqual(listFiles.Count, _nbFileProcessed, "Problem in the progress event");
             Assert.AreEqual(listFiles.GroupBy(f => f.CabPath).Count(), _nbArchiveFinished, "Problem in the progress event, number of archives");
         }
         
-        protected void DeleteFilesInArchive(ICabManager cabManager, List<FileInCab> listFiles) {
-            cabManager.OnProgress += ArchiverOnOnProgress;
-            _nbFileFinished = 0;
+        protected void DeleteFilesInArchive(ICabManager archiver, List<FileInCab> listFiles) {
+            archiver.OnProgress += ArchiverOnOnProgress;
+            _nbFileProcessed = 0;
             _nbArchiveFinished = 0;
-
-            // try to delete a non existing file
+            
             var modifiedList = listFiles.ToList();
+
+            // Test the cancellation.
+            _cancelSource = new CancellationTokenSource();
+            archiver.SetCancellationToken(_cancelSource.Token);
+            var list = modifiedList;
+            Assert.ThrowsException<OperationCanceledException>(() => archiver.DeleteFileSet(list));
+            Assert.IsTrue(_nbArchiveFinished == 0, "Nothing was done again.");
+            _nbFileProcessed = 0;
+            _cancelSource = null;
+            archiver.SetCancellationToken(null);
+            
+            // try to delete a non existing file
             modifiedList.Add(new FileInCab {
                 CabPath = listFiles.First().CabPath,
                 ExtractionPath = listFiles.First().ExtractionPath,
                 RelativePathInCab = "random.name"
             });
-            Assert.AreEqual(modifiedList.Count - 1, cabManager.DeleteFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, archiver.DeleteFileSet(modifiedList));
             
             foreach (var groupedFiles in listFiles.GroupBy(f => f.CabPath)) {
-                var files = cabManager.ListFiles(groupedFiles.Key);
+                var files = archiver.ListFiles(groupedFiles.Key);
                 Assert.AreEqual(0, files.Count(), $"The archive is not empty : {groupedFiles.Key}");
             }
             
-            cabManager.OnProgress -= ArchiverOnOnProgress;
-            Assert.AreEqual(listFiles.Count, _nbFileFinished, "Problem in the progress event");
+            archiver.OnProgress -= ArchiverOnOnProgress;
+            
+            // check progress
+            Assert.IsTrue(_hasReceivedGlobalProgression, "Should have received a progress event.");
+            Assert.AreEqual(listFiles.Count, _nbFileProcessed, "Problem in the progress event");
             Assert.AreEqual(listFiles.GroupBy(f => f.CabPath).Count(), _nbArchiveFinished, "Problem in the progress event, number of archives");
         }
         
-        protected void MoveInArchives(ICabManager cabManager, List<FileInCab> listFiles) {
-            cabManager.OnProgress += ArchiverOnOnProgress;
-            _nbFileFinished = 0;
+        protected void MoveInArchives(ICabManager archiver, List<FileInCab> listFiles) {
+            archiver.OnProgress += ArchiverOnOnProgress;
+            _nbFileProcessed = 0;
             _nbArchiveFinished = 0;
             
-            // try to move a non existing file
+            
             var modifiedList = listFiles.ToList();
             modifiedList.Add(new FileInCab {
                 CabPath = listFiles.First().CabPath,
@@ -133,11 +181,24 @@ namespace CabinetManagerTest.Tests {
                 RelativePathInCab = "random.name"
             });
             modifiedList.ForEach(f => f.NewRelativePathInCab = $"{f.RelativePathInCab}_move");
+            
+            // Test the cancellation.
+            _cancelSource = new CancellationTokenSource();
+            archiver.SetCancellationToken(_cancelSource.Token);
+            var list = modifiedList;
+            Assert.ThrowsException<OperationCanceledException>(() => archiver.MoveFileSet(list));
+            Assert.IsTrue(_nbArchiveFinished == 0, "Nothing was done again.");
+            _nbFileProcessed = 0;
+            _cancelSource = null;
+            archiver.SetCancellationToken(null);
 
-            Assert.AreEqual(modifiedList.Count - 1, cabManager.MoveFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, archiver.MoveFileSet(modifiedList));
 
-            cabManager.OnProgress -= ArchiverOnOnProgress;
-            Assert.AreEqual(listFiles.Count, _nbFileFinished, "Problem in the progress event");
+            archiver.OnProgress -= ArchiverOnOnProgress;
+            
+            // check progress
+            Assert.IsTrue(_hasReceivedGlobalProgression, "Should have received a progress event.");
+            Assert.AreEqual(listFiles.Count, _nbFileProcessed, "Problem in the progress event");
             Assert.AreEqual(listFiles.GroupBy(f => f.CabPath).Count(), _nbArchiveFinished, "Problem in the progress event, number of archives");
             
             // move them back
@@ -146,7 +207,7 @@ namespace CabinetManagerTest.Tests {
                 f.NewRelativePathInCab = f.NewRelativePathInCab.Substring(0, f.NewRelativePathInCab.Length - 5);
             });
             
-            Assert.AreEqual(modifiedList.Count - 1, cabManager.MoveFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, archiver.MoveFileSet(modifiedList));
             
             modifiedList.ForEach(f => {
                 f.RelativePathInCab = f.NewRelativePathInCab;
@@ -154,15 +215,27 @@ namespace CabinetManagerTest.Tests {
         }
 
         private void ArchiverOnOnProgress(object sender, ICabProgressionEventArgs e) {
-            if (e.EventType == CabEventType.FileProcessed) {
-                _nbFileFinished++;
-            } else if (e.EventType == CabEventType.CabinetCompleted) {
-                _nbArchiveFinished++;
+            switch (e.EventType) {
+                case CabEventType.GlobalProgression:
+                    if (e.PercentageDone < 0 || e.PercentageDone > 100) {
+                        throw new Exception($"Wrong value for percentage done : {e.PercentageDone}%.");
+                    }
+                    _hasReceivedGlobalProgression = true;
+                    _cancelSource?.Cancel();
+                    break;
+                case CabEventType.FileProcessed:
+                    _nbFileProcessed++;
+                    break;
+                case CabEventType.CabinetCompleted:
+                    _nbArchiveFinished++;
+                    break;
+                default:
+                    throw new ArgumentOutOfRangeException();
             }
         }
         
         protected List<FileInCab> GetPackageTestFilesList(string testFolder, string cabPath) {
-            var list = new List<FileInCab> {
+            var outputList = new List<FileInCab> {
                 new FileInCab {
                     SourcePath = Path.Combine(testFolder, "file 0.txt"),
                     CabPath = cabPath,
@@ -188,18 +261,36 @@ namespace CabinetManagerTest.Tests {
                     ExtractionPath = Path.Combine(testFolder, "extract", Path.GetFileName(cabPath) ?? "", "subfolder1", "bla bla", "file3.txt")
                 }
             };
-            foreach (var file in list) {
-                File.WriteAllText(file.SourcePath, $"\"{Path.GetFileName(file.SourcePath)}\"");
+            
+            byte[] fileBuffer = Enumerable.Repeat((byte) 42, 1000).ToArray();
+            foreach (var file in outputList) {
+                using (Stream sourceStream = File.OpenWrite(file.SourcePath)) {
+                    for (int i = 0; i < 2000; i++) {
+                        sourceStream.Write(fileBuffer, 0, fileBuffer.Length);
+                    }
+                }
+            }
+
+            CleanupExtractedFiles(outputList);
+            CleanupArchives(outputList);
+            
+            return outputList;
+        }
+        
+        protected void CleanupExtractedFiles(List<FileInCab> fileList) {
+            foreach (var file in fileList) {
                 if (File.Exists(file.ExtractionPath)) {
                     File.Delete(file.ExtractionPath);
                 }
             }
-            foreach (var cabGrouped in list.GroupBy(f => f.CabPath)) {
+        }
+        
+        protected void CleanupArchives(List<FileInCab> fileList) {
+            foreach (var cabGrouped in fileList.GroupBy(f => f.CabPath)) {
                 if (File.Exists(cabGrouped.Key)) {
                     File.Delete(cabGrouped.Key);
                 }
             }
-            return list;
         }
         
     }

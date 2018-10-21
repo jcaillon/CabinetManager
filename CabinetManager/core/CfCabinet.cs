@@ -409,6 +409,7 @@ namespace CabinetManager.core {
                     UpdateCabinetSize(writer);
                 }
                 _reader?.Dispose();
+                _cancelToken?.ThrowIfCancellationRequested();
                 File.Delete(CabPath);
                 File.Move(CabPathToWrite, CabPath);
             } finally {
@@ -548,6 +549,14 @@ namespace CabinetManager.core {
                 folder.FirstDataBlockOffset = (uint) writer.BaseStream.Position;
                 folder.WriteFolderDataBlocks(_reader, writer, _cancelToken, WriteDataProgress);
                 folder.UpdateDataBlockInfo(writer);
+            }
+
+            if (totalNumberOfBytes == 0) {
+                // make sure to call this at least once
+                var args = CfSaveEventArgs.New(string.Empty, 1);
+                args.TotalBytesDone = 1;
+                args.TotalBytesToProcess = 1;
+                OnProgress?.Invoke(this, args);
             }
         }
 

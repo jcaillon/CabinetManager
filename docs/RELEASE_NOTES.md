@@ -1,4 +1,3 @@
 ## Improvements
 
-- Correctly clean up half extracted files if a cancellation is requested during `ExtractFileSet`.
-- Added dotnet sourcelink support
+- Always show progression, even when deleting all files.
