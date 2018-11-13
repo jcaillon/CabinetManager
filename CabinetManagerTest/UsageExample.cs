@@ -75,6 +75,11 @@ namespace CabinetManagerTest {
 
             Console.WriteLine($" -> {nbProcessed} files were moved within the cabinet.");
 
+            Console.WriteLine("Listing files that were processed.");
+            foreach (var file in filesToMove.Where(f => f.Processed)) {
+                Console.WriteLine($" * {file.RelativePathInCab}");
+            }
+
             // Delete files in a cabinet
             Console.WriteLine("Delete file in cabinet.");
             nbProcessed = cabManager.DeleteFileSet(filesToMove.Select(f => CabFile.NewToDelete(f.CabPath, f.NewRelativePathInCab)));
@@ -101,6 +106,7 @@ namespace CabinetManagerTest {
             
             public string CabPath { get; private set; }
             public string RelativePathInCab { get; private set; }
+            public bool Processed { get; set; }
             public string ExtractionPath { get; private set; }
             public string SourcePath { get; private set; }
             public string NewRelativePathInCab { get; private set; }

@@ -38,5 +38,10 @@ namespace CabinetManager {
         /// </summary>
         string RelativePathInCab { get; }
         
+        /// <summary>
+        /// Boolean set after an archiver action which indicates if this file was actually processed.
+        /// </summary>
+        bool Processed { get; set; }
+        
     }
 }

@@ -54,7 +54,7 @@ namespace CabinetManager {
         /// <para>
         /// Pack (i.e. add or replace) files into cabinets.
         /// Non existing source files will not throw an exception.
-        /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
+        /// You can inspect which files are processed with the <see cref="OnProgress"/> event or using <see cref="IFileCabBase.Processed"/>.
         /// Packing into an existing cabinet will update it.
         /// Packing existing files will update them.
         /// </para>
@@ -78,7 +78,7 @@ namespace CabinetManager {
         /// Extracts the given files from cabinets.
         /// Requesting the extraction from a non existing cabinet will not throw an exception.
         /// Requesting the extraction a file that does not exist in the cabinet will not throw an exception.
-        /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
+        /// You can inspect which files are processed with the <see cref="OnProgress"/> event or using <see cref="IFileCabBase.Processed"/>.
         /// </para>
         /// </summary>
         /// <param name="filesToExtract"></param>
@@ -92,7 +92,7 @@ namespace CabinetManager {
         /// Deletes the given files from cabinets.
         /// Requesting the deletion from a non existing cabinet will not throw an exception.
         /// Requesting the deletion a file that does not exist in the cabinet will not throw an exception.
-        /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
+        /// You can inspect which files are processed with the <see cref="OnProgress"/> event or using <see cref="IFileCabBase.Processed"/>.
         /// </para>
         /// </summary>
         /// <param name="filesToDelete"></param>
@@ -106,7 +106,7 @@ namespace CabinetManager {
         /// Moves the given files within cabinets.
         /// Requesting the movement from a non existing cabinet will not throw an exception.
         /// Requesting the movement a file that does not exist in the cabinet will not throw an exception.
-        /// You can inspect which files are processed with the <see cref="OnProgress"/> event.
+        /// You can inspect which files are processed with the <see cref="OnProgress"/> event or using <see cref="IFileCabBase.Processed"/>.
         /// </para>
         /// </summary>
         /// <param name="filesToMove"></param>

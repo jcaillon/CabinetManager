@@ -25,6 +25,7 @@ namespace CabinetManager.@internal {
     internal class FileInCab : IFileInCab {
         public string CabPath { get; set; }
         public string RelativePathInCab { get; set; }
+        public bool Processed { get; set; }
         public ulong SizeInBytes { get; set; }
         public DateTime LastWriteTime { get; set; }
         public FileAttributes FileAttributes { get; set; }

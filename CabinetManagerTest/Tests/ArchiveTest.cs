@@ -63,10 +63,12 @@ namespace CabinetManagerTest.Tests {
                 RelativePathInCab = "random.name"
             });
             Assert.AreEqual(modifiedList.Count - 1, archiver.PackFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, modifiedList.Count(f => f.Processed));
             
             // test the update of archives
             modifiedList = listFiles.GetRange(0, 1);
             Assert.AreEqual(modifiedList.Count, archiver.PackFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count, modifiedList.Count(f => f.Processed));
 
             foreach (var archive in listFiles.GroupBy(f => f.CabPath)) {
                 if (Directory.Exists(Path.GetDirectoryName(archive.Key))) {
@@ -116,6 +118,7 @@ namespace CabinetManagerTest.Tests {
                 RelativePathInCab = "random.name"
             });
             Assert.AreEqual(modifiedList.Count - 1, archiver.ExtractFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, modifiedList.Count(f => f.Processed));
             
             foreach (var fileToExtract in listFiles) {
                 Assert.IsTrue(File.Exists(fileToExtract.ExtractionPath), $"Extracted file does not exist : {fileToExtract.ExtractionPath}");
@@ -154,6 +157,7 @@ namespace CabinetManagerTest.Tests {
                 RelativePathInCab = "random.name"
             });
             Assert.AreEqual(modifiedList.Count - 1, archiver.DeleteFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, modifiedList.Count(f => f.Processed));
             
             foreach (var groupedFiles in listFiles.GroupBy(f => f.CabPath)) {
                 var files = archiver.ListFiles(groupedFiles.Key);
@@ -193,6 +197,7 @@ namespace CabinetManagerTest.Tests {
             archiver.SetCancellationToken(null);
 
             Assert.AreEqual(modifiedList.Count - 1, archiver.MoveFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, modifiedList.Count(f => f.Processed));
 
             archiver.OnProgress -= ArchiverOnOnProgress;
             
@@ -208,6 +213,7 @@ namespace CabinetManagerTest.Tests {
             });
             
             Assert.AreEqual(modifiedList.Count - 1, archiver.MoveFileSet(modifiedList));
+            Assert.AreEqual(modifiedList.Count - 1, modifiedList.Count(f => f.Processed));
             
             modifiedList.ForEach(f => {
                 f.RelativePathInCab = f.NewRelativePathInCab;

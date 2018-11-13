@@ -25,6 +25,7 @@ namespace CabinetManagerTest.Tests {
     public class FileInCab : IFileInCabToDelete, IFileInCabToExtract, IFileToAddInCab, IFileInCabToMove {
         public string CabPath { get; set; }
         public string RelativePathInCab { get; set; }
+        public bool Processed { get; set; }
         public ulong SizeInBytes { get; set; }
         public DateTime LastWriteTime { get; set; }
         public string ExtractionPath { get; set; }

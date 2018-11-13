@@ -41,7 +41,7 @@ namespace CabinetManagerTest {
             File.WriteAllText(@"my_source_file.txt", @"my content");
             
             var cabManager = CabManager.New();
-
+            
             cabManager.SetCompressionLevel(CabCompressionLevel.None);
             cabManager.SetCancellationToken(null);
             cabManager.OnProgress += CabManagerOnProgress;
@@ -69,13 +69,18 @@ namespace CabinetManagerTest {
             });
 
             Console.WriteLine($" -> {nbProcessed} files were extracted from a cabinet.");
-
+            
             // Move files within a cabinet
             var filesToMove = filesInCab.Select(f => CabFile.NewToMove(f.CabPath, f.RelativePathInCab, $"subfolder/{f.RelativePathInCab}")).ToList();
             Console.WriteLine("Moving files within a cabinet.");
             nbProcessed = cabManager.MoveFileSet(filesToMove);
 
             Console.WriteLine($" -> {nbProcessed} files were moved within the cabinet.");
+
+            Console.WriteLine("Listing files that were processed.");
+            foreach (var file in filesToMove.Where(f => f.Processed)) {
+                Console.WriteLine($" * {file.RelativePathInCab}");
+            }
 
             // Delete files in a cabinet
             Console.WriteLine("Delete file in cabinet.");
@@ -103,6 +108,7 @@ namespace CabinetManagerTest {
             
             public string CabPath { get; private set; }
             public string RelativePathInCab { get; private set; }
+            public bool Processed { get; set; }
             public string ExtractionPath { get; private set; }
             public string SourcePath { get; private set; }
             public string NewRelativePathInCab { get; private set; }
