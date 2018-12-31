@@ -2,7 +2,7 @@
 
 Handles microsoft cabinet format (.cab files) in pure C#.
 
-[![logo](docs/logo.png)](https://jcaillon.github.io/CabinetManager/)
+[![logo](docs/images/logo.png)](https://jcaillon.github.io/CabinetManager/)
 
 Status | Info
 ------ | --------
