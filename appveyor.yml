@@ -45,14 +45,14 @@ install:
 #---------------------------------#
 
 build_script:
-  - cmd: build.bat
+  - ps: .\build.ps1 -ShouldExit 1
 
 #---------------------------------#
 #       tests configuration       #
 #---------------------------------#
 
-test_script:
-  - cmd: runtests.bat
+#test_script:
+#  - cmd: runtests.bat
 
 #---------------------------------#
 #      artifacts configuration    #
