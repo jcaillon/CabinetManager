@@ -6,14 +6,14 @@
 version: 1.0.{build}-{branch}
 
 # branches to build
-branches:
-  # whitelist
-  only:
-    - master
+# branches:
+#   # whitelist
+#   only:
+#     - master
 
-  # blacklist
-  except:
-    - gh-pages
+#   # blacklist
+#   except:
+#     - gh-pages
 
 # Skipping commits with particular message or from specific user
 skip_commits:
@@ -97,7 +97,7 @@ deploy:
     # encrypt at https://ci.appveyor.com/tools/encrypt
     auth_token:
       secure: 3iog8mBj0QRNVL9bIvMxlJNcRkKaoPgXtShwnhIjkxO4+v3F93h96i5pUUV04rfB
-    artifact: zip
+    artifact: nupkg
     draft: true
     prerelease: true
     on:
